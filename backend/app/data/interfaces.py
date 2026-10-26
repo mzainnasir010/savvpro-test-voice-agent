@@ -48,6 +48,18 @@ class IParcelRepository(abc.ABC):
         current slot.
         """
 
+    @abc.abstractmethod
+    def rebook_slot(
+        self,
+        old_slot_id: str,
+        new_slot_id: str,
+        tracking_id: str,
+    ) -> bool:
+        """Atomically release *old_slot_id* and book *new_slot_id*.
+
+        Returns False if the new slot is full (old slot unchanged).
+        """
+
     # -- Pickup points --------------------------------------------------
 
     @abc.abstractmethod

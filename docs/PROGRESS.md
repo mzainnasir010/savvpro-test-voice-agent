@@ -50,18 +50,7 @@
 | `tests/test_health.py` | 8 tests: health response, CORS headers, app wiring |
 | `tests/test_no_llm.py` | 15 parametrized tests: one per banned AI SDK substring |
 
-**Files modified:**
-
-| File | Change |
-|------|--------|
-| `backend/requirements.txt` | Added `pydantic-settings==2.9.1`, `pytest-cov==6.2.1`, `python-dotenv==1.1.0` |
-| `.env.example` | All config vars documented |
-| `README.md` | Setup, run, and test instructions |
-
-**Test results:**
-```
-23 passed, 1 warning in 0.17s
-```
+**Test results:** `23 passed`
 
 ---
 
@@ -79,12 +68,9 @@
 | `app/data/interfaces.py` | `IParcelRepository`, `ISessionStore` ABCs |
 | `app/data/loader.py` | `load_parcels`, `load_pickup_points`, `load_slots`, `generate_slots` (clock-injected) |
 | `app/data/repository.py` | `InMemoryParcelRepository` (threading.Lock, atomic book/release/rebook/cancel), `InMemorySessionStore` |
-| `tests/test_repository.py` | 62 tests: loader validation, slot generation, booking, concurrency, pickup filtering, cancel, phone failures, session store |
+| `tests/test_repository.py` | 62 tests: loader, slots, booking, concurrency, pickup filtering, cancel, phone failures, session store |
 
-**Test results:**
-```
-85 passed, 2 warnings in 0.69s
-```
+**Test results:** `85 passed`
 
 ---
 
@@ -95,32 +81,122 @@
 | File | Purpose |
 |------|---------|
 | `app/brain/__init__.py` | Brain package marker |
-| `app/brain/constants.py` | `FILLER_WORDS` (without "like"), `NUMBER_WORD_MAP` (longest-first), `DOUBLE_TRIPLE_PATTERN` (with "oh"), `OH_DIGIT_CONTEXT`, `_WORD_TO_SINGLE_DIGIT`, thresholds, `RD_PHONETIC_PREFIXES`, `MESSAGES`, `PARCEL_STATUS_RULES` |
-| `app/brain/normalizer.py` | Two-pass normalizer: common preprocess → `intent_text`; additional digit pass → `digit_text`. Returns frozen `NormalizeResult` dataclass. |
-| `tests/test_normalizer.py` | 64 tests: happy path, intent preservation ("oh no", "one moment"), digit conversion ("double five"→"55", "triple nine"→"999", "oh"→"0"), boundaries (empty, 2000, 2001), injection (HTML, SQL, Unicode), "like" preserved, 19 parametrized phrase pairs, return type |
+| `app/brain/constants.py` | `FILLER_WORDS` (without "like"), `NUMBER_WORD_MAP` (longest-first), `DOUBLE_TRIPLE_PATTERN` (with "oh"), thresholds, `RD_PHONETIC_PREFIXES`, `MESSAGES`, `PARCEL_STATUS_RULES` |
+| `app/brain/normalizer.py` | Two-pass normalizer → frozen `NormalizeResult(intent_text, digit_text)` |
+| `tests/test_normalizer.py` | 64 tests: happy, intent preservation, digit conversion, boundaries, injection, parametrized |
 
-**Design decisions:**
-- `"oh"` added to `DOUBLE_TRIPLE_PATTERN` and `_WORD_TO_SINGLE_DIGIT` so "double oh" → "00".
-- HTML angle brackets (printable ASCII) are preserved by the normalizer as harmless plain text — safety comes from the fact that output is never executed.
-- `NormalizeResult` is a frozen dataclass for immutability.
+**Test results:** `149 passed`
 
-**Test results:**
-```
-149 passed, 2 warnings in 0.49s
-```
+---
+
+### Step 4 — Tracking ID and phone extractor ✅
+
+**Files created:**
+
+| File | Purpose |
+|------|---------|
+| `app/brain/extractor.py` | `extract_tracking_ids(digit_text)` — phonetic RD prefix variants (rd, r d, are dee, our d, ardie) + 8 digits (space-separated ok). `extract_phone_last4(digit_text, exclude_digits)` — 4-digit extraction avoiding tracking ID overlap, returns `None` on ambiguity. |
+| `tests/test_extractor.py` | 58 tests: 18 parametrized tracking ID phrasings, phone last-4 with exclusion, ambiguity (2+ groups → None), overlap filtering, combined extraction scenarios |
+
+**Test results:** `207 passed`
+
+---
+
+### Step 5 — Date and time parser ✅
+
+**Files created:**
+
+| File | Purpose |
+|------|---------|
+| `app/brain/date_parser.py` | `parse_date_and_period(text, clock)` → `ParseResult(date, period, reason)`. Supports relative ("today", "tomorrow", "day after tomorrow", "in N days"), weekday names ("next friday", "this wednesday"), "this weekend" → Saturday, ordinals ("28th", "november 3rd"), periods ("morning"/"am"/"before noon" → "morning", "afternoon"/"midday"/"lunchtime" → "afternoon", "evening"/"night"/"pm"/"after 5" → "evening"). Rejection reasons: "past", "out_of_range", "cutoff". Clock injected, never reads system time. |
+| `tests/test_date_parser.py` | 64 tests: relative dates, weekday names, ordinals, "this weekend", period detection (13 parametrized), cutoff logic (today morning at 14:30 → cutoff), past/out_of_range rejections, combined date+period, no-date edge cases |
+
+**Test results:** `271 passed`
 
 ---
 
 ## Next step
 
-### Step 4 — Tracking ID and phone extractor
+### Step 10 — Session management and API endpoints
 
-Build per PLAN.md §2.11:
+Build per PLAN.md §10:
 
-1. Create `app/brain/extractor.py` with:
-   - `extract_tracking_ids(digit_text)` — phonetic RD prefix variants, 8 digits.
-   - `extract_phone_last4(digit_text, exclude_digits)` — 4-digit extraction avoiding tracking ID overlap.
-2. Write `tests/test_extractor.py` with 15+ tracking ID phrasings.
+1. `app/models/api.py` — request/response Pydantic models.
+2. `app/api/dependencies.py` — FastAPI dependency injection (repo, session store, clock).
+3. `app/api/routes/sessions.py` — `POST /sessions`, `POST /sessions/{id}/turns`, `GET /sessions/{id}`, `DELETE /sessions/{id}`.
+4. `tests/test_sessions_api.py` — HTTP-level tests.
+5. `tests/test_scenarios/` — multi-turn end-to-end conversation tests.
+
+---
+
+
+## Completed steps (continued)
+
+### Step 9 — Messy caller handling ✅
+
+**Files created:**
+
+| File | Purpose |
+|------|---------|
+| `tests/test_edge_cases.py` | 35 tests covering all 18 edge cases from PLAN.md §8: date changes mid-flow (#1), action switching (#2), tracking misheard/partial (#3), tracking not found (#4), phone failure escalation + lock (#5), status-blocked actions (#6), slot full with alt offer (#7), date past/out-of-range/cutoff (#8), multi-slot turn (#9), unknown escalation (#10), silence 3-turn escalation + counter independence (#11), repeat/human/goodbye at any state (#12), cancel requires confirm (#13), affirm/deny wrong state (#14), injection/length/null/unicode safety (#15), two tracking IDs disambiguation (#16), concurrent booking race (#17), post-END turns (#18) |
+
+**Already in place (no new code needed):**
+- Length guard: normalizer truncates at `MAX_INPUT_LENGTH` (2000 chars)
+- Non-printable char stripping: `_strip_unsafe()` in normalizer
+- Silence/unknown escalation: already in `state_machine.py` cross-cutting rules
+- Separate counters: `silence_count` and `unknown_count` are independent
+
+**Test results:** `478 passed`
+
+---
+
+### Step 6 — Intent detector ✅
+
+**Files created/modified:**
+
+| File | Purpose |
+|------|---------|
+| `app/brain/constants.py` | Added `INTENT_KEYWORDS` (10 intents × 5–10 phrases), `INTENT_REGEX_PATTERNS` (10 intents), `STATE_INTENT_PRIORITY` (5 confirm states), `DISAMBIG_NO_WAIT`, `DISAMBIG_CANCEL_THAT`, `MESSAGES`, `PARCEL_STATUS_RULES` |
+| `app/brain/intent_detector.py` | `detect_intent(intent_text, state)` → `IntentResult`. Weighted keyword/regex scoring, whole-word matching (`\b`), best-hit + 0.15 bonus, state-aware priority for CONFIRM states, disambiguation patterns, ambiguity margin (runner-up tracking) |
+| `tests/test_intent_detector.py` | 80 tests: happy path per intent, whole-word matching, state-aware priority, disambiguation, false positives/negatives, parametrized (5+ phrasings per intent) |
+
+**Test results:** `351 passed`
+
+---
+
+### Step 7 — Slot filler, expanded Session model, and state machine ✅
+
+**Files created/modified:**
+
+| File | Purpose |
+|------|---------|
+| `app/models/session.py` | Expanded: `DialogueState` enum (13 states), `SlotMap` (tracking_id, ambiguous_ids, phone_last4, intended_date/period, confirmed_slot_id, pickup_point_id, action_intent, cancel_confirmed, verified), `DecisionTrace` (debugging breadcrumbs), `Turn` (role, text, trace), `Session` (state, slots, history, counters for silence/unknown/tracking/phone) |
+| `app/brain/slot_filler.py` | `fill_from_turn(slot_map, norm, clock, state)` — extracts all slots from a single turn (tracking IDs, phone last 4, date/period). State-gated: only extracts what's relevant. Handles ambiguous IDs (2+), phone exclusion of tracking digits, date rejections. `reset_date_slots()`, `reset_action_slots()`, `missing_required_slots()` |
+| `app/brain/state_machine.py` | `StateMachine.process(session, text, clock, silence, stt_confidence)` → `TurnResult`. 13 state handlers, cross-cutting rules (silence escalation, repeat, human_agent, goodbye, unknown escalation, low STT), service integration. No AI, no LLM, clock injected |
+| `app/data/interfaces.py` | Added `rebook_slot` abstract method to `IParcelRepository` |
+| `tests/test_slot_filler.py` | 33 tests: SlotMap defaults, reset helpers, fill_from_turn (tracking, phone, date/period, state gating), missing slots, DialogueState enum, Session model, Turn/DecisionTrace |
+| `tests/test_state_machine.py` | 31 tests: END state, silence (3-turn escalation), low STT, repeat/human/goodbye, COLLECT_TRACKING_ID (found/not found/max attempts), CONFIRM_TRACKING_ID (affirm/deny), VERIFY_PHONE (correct/wrong/locked), CHOOSE_ACTION (reschedule/cancel/status/unknown), COLLECT_DATE (date+period/date only/change of mind/past), CONFIRM_CANCEL (affirm/deny), DELIVER_STATUS→CHOOSE_ACTION, TurnResult/trace/history |
+
+**Test results:** `443 passed`
+
+---
+
+### Step 8 — Business logic services ✅
+
+**Files created:**
+
+| File | Purpose |
+|------|---------|
+| `app/services/__init__.py` | Package marker |
+| `app/services/verification.py` | `verify_tracking_id(repo, id)`, `verify_phone(repo, parcel, last4)` — lookup + phone check with failure counter + lock check |
+| `app/services/booking.py` | `get_available_slots(repo, date, clock, period)` — filters full + past cutoff. `find_nearest_available(repo, clock, exclude_date, period)`. `book_slot`, `release_slot`, `rebook_slot` — thin wrappers around repo |
+| `app/services/pickup.py` | `list_pickup_points(repo, open_on)`, `get_pickup_point(repo, id)` |
+| `app/services/cancellation.py` | `cancel_parcel(repo, tracking_id)` — thin wrapper, repo handles slot release |
+| `tests/test_services.py` | 23 tests: verification (found/not found, phone correct/wrong/counter/locked), booking (available/period filter/today cutoff/fully booked day/book/release/rebook/nearest), pickup (list/filter/get), cancellation (success/already cancelled/not found/releases slot) |
+
+**Integrated into** `state_machine.py` — all service functions called from state handlers.
+
+**Test results:** `443 passed`
 
 ---
 
@@ -132,6 +208,12 @@ Build per PLAN.md §2.11:
   printable ASCII.  The normalizer's safety guarantee is that output is
   plain text with no executable context, not that specific character
   sequences are removed.
+- **Step 7:** Phone test uses "9876" instead of "0000" because "0000" is a
+  substring of tracking ID "RD10000001" digits and gets excluded by the
+  phone extractor (correct behavior, just needs non-overlapping test data).
+- **Step 7/8:** CHOOSE_ACTION tests use RD30000001 (`failed_attempt`) for
+  reschedule/cancel because RD10000001 (`in_transit`) only allows `status`
+  per `PARCEL_STATUS_RULES`.
 
 ---
 
@@ -147,9 +229,9 @@ With coverage:
 d:\Projects\test\savvpro-test-voice-agent\backend\.venv\Scripts\python.exe -m pytest tests/ --cov=app --cov-report=term-missing
 ```
 
-**Latest result (Step 3):**
+**Latest result (Step 9):**
 ```
-149 passed, 2 warnings in 0.49s
+478 passed, 2 warnings in 2.19s
 ```
 
 ---
@@ -157,10 +239,9 @@ d:\Projects\test\savvpro-test-voice-agent\backend\.venv\Scripts\python.exe -m py
 ## Known issues
 
 - `StarletteDeprecationWarning` about `httpx` vs `httpx2` in test client.
-  Cosmetic; does not affect functionality.  Will resolve when starlette
-  updates or when we bump the httpx dependency.
+  Cosmetic; does not affect functionality.
 - `ArbitraryTypeWarning` from Pydantic about `threading.Lock` in `Session`.
-  Cosmetic; lock works correctly.  Can wrap with `SkipValidation` later.
+  Cosmetic; lock works correctly.
 
 ---
 
@@ -178,21 +259,32 @@ backend/
 │   │       └── health.py        ← Step 1
 │   ├── brain/
 │   │   ├── __init__.py          ← Step 3
-│   │   ├── constants.py         ← Step 3
-│   │   └── normalizer.py        ← Step 3
+│   │   ├── constants.py         ← Step 3 / Step 6
+│   │   ├── normalizer.py        ← Step 3
+│   │   ├── extractor.py         ← Step 4
+│   │   ├── date_parser.py       ← Step 5
+│   │   ├── intent_detector.py   ← Step 6
+│   │   ├── slot_filler.py       ← Step 7
+│   │   └── state_machine.py     ← Step 7
 │   ├── core/
 │   │   ├── __init__.py          ← Step 1
 │   │   ├── config.py            ← Step 1
 │   │   └── logging.py           ← Step 1
 │   ├── data/
 │   │   ├── __init__.py          ← Step 2
-│   │   ├── interfaces.py        ← Step 2
+│   │   ├── interfaces.py        ← Step 2 / Step 7
 │   │   ├── loader.py            ← Step 2
 │   │   └── repository.py        ← Step 2
-│   └── models/
-│       ├── __init__.py          ← Step 2
-│       ├── parcel.py            ← Step 2
-│       └── session.py           ← Step 2
+│   ├── models/
+│   │   ├── __init__.py          ← Step 2
+│   │   ├── parcel.py            ← Step 2
+│   │   └── session.py           ← Step 2 / Step 7
+│   └── services/
+│       ├── __init__.py          ← Step 8
+│       ├── verification.py      ← Step 8
+│       ├── booking.py           ← Step 8
+│       ├── pickup.py            ← Step 8
+│       └── cancellation.py      ← Step 8
 ├── data/
 │   ├── parcels.json             ← Step 2
 │   ├── slots.json               ← Step 2
@@ -203,6 +295,14 @@ backend/
 │   ├── test_health.py           ← Step 1
 │   ├── test_no_llm.py           ← Step 1
 │   ├── test_normalizer.py       ← Step 3
-│   └── test_repository.py       ← Step 2
+│   ├── test_extractor.py        ← Step 4
+│   ├── test_date_parser.py      ← Step 5
+│   ├── test_intent_detector.py  ← Step 6
+│   ├── test_repository.py       ← Step 2
+│   ├── test_slot_filler.py      ← Step 7
+│   ├── test_state_machine.py    ← Step 7
+│   ├── test_services.py         ← Step 8
+│   └── test_edge_cases.py       ← Step 9
 └── requirements.txt             ← Step 1 (modified)
 ```
+
