@@ -1,0 +1,37 @@
+[
+  {
+    "point_id": "PP-001",
+    "name": "Westside Depot",
+    "address": "12 Commerce Road, Westville",
+    "open_days": ["monday", "tuesday", "wednesday", "thursday", "friday"],
+    "open_hours": "08:00-18:00"
+  },
+  {
+    "point_id": "PP-002",
+    "name": "Central Hub",
+    "address": "88 High Street, Centretown",
+    "open_days": ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"],
+    "open_hours": "07:00-21:00"
+  },
+  {
+    "point_id": "PP-003",
+    "name": "Northgate Post Office",
+    "address": "5 Station Parade, Northgate",
+    "open_days": ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday"],
+    "open_hours": "09:00-17:30"
+  },
+  {
+    "point_id": "PP-004",
+    "name": "Riverside Collection Point",
+    "address": "27 River Lane, Dockside",
+    "open_days": ["monday", "tuesday", "wednesday", "thursday", "friday"],
+    "open_hours": "08:30-17:00"
+  },
+  {
+    "point_id": "PP-005",
+    "name": "Eastend Mini Depot",
+    "address": "140 Market Square, Eastborough",
+    "open_days": ["tuesday", "wednesday", "thursday", "friday", "saturday"],
+    "open_hours": "10:00-19:00"
+  }
+]

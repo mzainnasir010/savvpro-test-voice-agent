@@ -65,28 +65,73 @@
 
 ---
 
+### Step 2 — Fake data layer ✅
+
+**Files created:**
+
+| File | Purpose |
+|------|---------|
+| `backend/data/parcels.json` | 21 fake parcels across 6 statuses |
+| `backend/data/slots.json` | Capacity template with pre-booked offsets (day 1 morning full, day 3 fully booked, day 5 evening nearly full) |
+| `backend/data/pickup_points.json` | 5 pickup points: 2 weekday-only, 1 seven-day, 2 mixed |
+| `app/models/parcel.py` | `Parcel`, `DeliverySlot`, `PickupPoint`, `ParcelStatus`, `Period`, `SlotTemplate`, `PreBookedEntry` |
+| `app/models/session.py` | Minimal `Session` model (expanded in Step 7) |
+| `app/data/interfaces.py` | `IParcelRepository`, `ISessionStore` ABCs |
+| `app/data/loader.py` | `load_parcels`, `load_pickup_points`, `load_slots`, `generate_slots` (clock-injected) |
+| `app/data/repository.py` | `InMemoryParcelRepository` (threading.Lock, atomic book/release/rebook/cancel), `InMemorySessionStore` |
+| `tests/test_repository.py` | 62 tests: loader validation, slot generation, booking, concurrency, pickup filtering, cancel, phone failures, session store |
+
+**Test results:**
+```
+85 passed, 2 warnings in 0.69s
+```
+
+---
+
+### Step 3 — Text normalizer (two-pass) ✅
+
+**Files created:**
+
+| File | Purpose |
+|------|---------|
+| `app/brain/__init__.py` | Brain package marker |
+| `app/brain/constants.py` | `FILLER_WORDS` (without "like"), `NUMBER_WORD_MAP` (longest-first), `DOUBLE_TRIPLE_PATTERN` (with "oh"), `OH_DIGIT_CONTEXT`, `_WORD_TO_SINGLE_DIGIT`, thresholds, `RD_PHONETIC_PREFIXES`, `MESSAGES`, `PARCEL_STATUS_RULES` |
+| `app/brain/normalizer.py` | Two-pass normalizer: common preprocess → `intent_text`; additional digit pass → `digit_text`. Returns frozen `NormalizeResult` dataclass. |
+| `tests/test_normalizer.py` | 64 tests: happy path, intent preservation ("oh no", "one moment"), digit conversion ("double five"→"55", "triple nine"→"999", "oh"→"0"), boundaries (empty, 2000, 2001), injection (HTML, SQL, Unicode), "like" preserved, 19 parametrized phrase pairs, return type |
+
+**Design decisions:**
+- `"oh"` added to `DOUBLE_TRIPLE_PATTERN` and `_WORD_TO_SINGLE_DIGIT` so "double oh" → "00".
+- HTML angle brackets (printable ASCII) are preserved by the normalizer as harmless plain text — safety comes from the fact that output is never executed.
+- `NormalizeResult` is a frozen dataclass for immutability.
+
+**Test results:**
+```
+149 passed, 2 warnings in 0.49s
+```
+
+---
+
 ## Next step
 
-### Step 2 — Fake data layer
+### Step 4 — Tracking ID and phone extractor
 
-Build the data layer per PLAN.md §2.3–2.5 and §6:
+Build per PLAN.md §2.11:
 
-1. Write `backend/data/parcels.json` (20+ parcels across 6 statuses).
-2. Write `backend/data/slots.json` (capacity template, pre-booked offsets).
-3. Write `backend/data/pickup_points.json` (5 pickup points).
-4. Create `app/models/parcel.py` (Parcel, DeliverySlot, PickupPoint, ParcelStatus).
-5. Create `app/data/loader.py` (load JSON, generate slot grid from clock).
-6. Create `app/data/interfaces.py` (IParcelRepository, ISessionStore ABCs).
-7. Create `app/data/repository.py` (InMemoryParcelRepository with threading.Lock,
-   phone_failures tracking, InMemorySessionStore with per-session lock).
-8. Write `tests/test_repository.py`.
-9. Update `DESIGN.md`.
+1. Create `app/brain/extractor.py` with:
+   - `extract_tracking_ids(digit_text)` — phonetic RD prefix variants, 8 digits.
+   - `extract_phone_last4(digit_text, exclude_digits)` — 4-digit extraction avoiding tracking ID overlap.
+2. Write `tests/test_extractor.py` with 15+ tracking ID phrasings.
 
 ---
 
 ## Decisions that differ from PLAN.md
 
-*None so far — Step 1 followed the plan exactly.*
+- **Step 3:** Added `"oh"` to `DOUBLE_TRIPLE_PATTERN` and `_WORD_TO_SINGLE_DIGIT`
+  so that "double oh" → "00" (plan did not explicitly cover this compound).
+- **Step 3:** HTML `<script>` tags are not stripped because `<` and `>` are
+  printable ASCII.  The normalizer's safety guarantee is that output is
+  plain text with no executable context, not that specific character
+  sequences are removed.
 
 ---
 
@@ -102,9 +147,9 @@ With coverage:
 d:\Projects\test\savvpro-test-voice-agent\backend\.venv\Scripts\python.exe -m pytest tests/ --cov=app --cov-report=term-missing
 ```
 
-**Latest result (Step 1):**
+**Latest result (Step 3):**
 ```
-23 passed, 1 warning in 0.17s
+149 passed, 2 warnings in 0.49s
 ```
 
 ---
@@ -114,6 +159,8 @@ d:\Projects\test\savvpro-test-voice-agent\backend\.venv\Scripts\python.exe -m py
 - `StarletteDeprecationWarning` about `httpx` vs `httpx2` in test client.
   Cosmetic; does not affect functionality.  Will resolve when starlette
   updates or when we bump the httpx dependency.
+- `ArbitraryTypeWarning` from Pydantic about `threading.Lock` in `Session`.
+  Cosmetic; lock works correctly.  Can wrap with `SkipValidation` later.
 
 ---
 
@@ -129,14 +176,33 @@ backend/
 │   │   └── routes/
 │   │       ├── __init__.py      ← Step 1
 │   │       └── health.py        ← Step 1
-│   └── core/
-│       ├── __init__.py          ← Step 1
-│       ├── config.py            ← Step 1
-│       └── logging.py           ← Step 1
+│   ├── brain/
+│   │   ├── __init__.py          ← Step 3
+│   │   ├── constants.py         ← Step 3
+│   │   └── normalizer.py        ← Step 3
+│   ├── core/
+│   │   ├── __init__.py          ← Step 1
+│   │   ├── config.py            ← Step 1
+│   │   └── logging.py           ← Step 1
+│   ├── data/
+│   │   ├── __init__.py          ← Step 2
+│   │   ├── interfaces.py        ← Step 2
+│   │   ├── loader.py            ← Step 2
+│   │   └── repository.py        ← Step 2
+│   └── models/
+│       ├── __init__.py          ← Step 2
+│       ├── parcel.py            ← Step 2
+│       └── session.py           ← Step 2
+├── data/
+│   ├── parcels.json             ← Step 2
+│   ├── slots.json               ← Step 2
+│   └── pickup_points.json       ← Step 2
 ├── tests/
 │   ├── __init__.py              (pre-existing, empty)
 │   ├── conftest.py              ← Step 1
 │   ├── test_health.py           ← Step 1
-│   └── test_no_llm.py           ← Step 1
+│   ├── test_no_llm.py           ← Step 1
+│   ├── test_normalizer.py       ← Step 3
+│   └── test_repository.py       ← Step 2
 └── requirements.txt             ← Step 1 (modified)
 ```
