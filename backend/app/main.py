@@ -6,13 +6,13 @@ lifespan hook, and registers all route modules.
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import AsyncIterator
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import health
+from app.api.routes import health, sessions
 from app.core.config import get_settings
 from app.core.logging import get_logger, setup_logging
 
@@ -55,6 +55,7 @@ def create_app() -> FastAPI:
 
     # --- Routes --------------------------------------------------------
     app.include_router(health.router)
+    app.include_router(sessions.router)
 
     return app
 

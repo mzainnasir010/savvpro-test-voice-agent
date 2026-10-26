@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from datetime import date
-from typing import Optional
 
 from app.data.interfaces import IParcelRepository
 from app.models.parcel import PickupPoint
@@ -11,7 +10,7 @@ from app.models.parcel import PickupPoint
 
 def list_pickup_points(
     repo: IParcelRepository,
-    open_on: Optional[date] = None,
+    open_on: date | None = None,
 ) -> list[PickupPoint]:
     """Return all pickup points, optionally filtered by open day.
 
@@ -31,7 +30,7 @@ def list_pickup_points(
 def get_pickup_point(
     repo: IParcelRepository,
     point_id: str,
-) -> Optional[PickupPoint]:
+) -> PickupPoint | None:
     """Look up a pickup point by ID.
 
     Returns the ``PickupPoint`` if found, or ``None``.

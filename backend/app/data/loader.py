@@ -9,7 +9,6 @@ from __future__ import annotations
 import json
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import List
 
 from app.models.parcel import (
     DeliverySlot,
@@ -20,7 +19,7 @@ from app.models.parcel import (
 )
 
 
-def load_parcels(data_dir: Path) -> List[Parcel]:
+def load_parcels(data_dir: Path) -> list[Parcel]:
     """Read ``parcels.json`` and return validated Parcel objects."""
     path = data_dir / "parcels.json"
     with open(path, encoding="utf-8") as f:
@@ -28,7 +27,7 @@ def load_parcels(data_dir: Path) -> List[Parcel]:
     return [Parcel.model_validate(item) for item in raw]
 
 
-def load_pickup_points(data_dir: Path) -> List[PickupPoint]:
+def load_pickup_points(data_dir: Path) -> list[PickupPoint]:
     """Read ``pickup_points.json`` and return validated PickupPoint objects."""
     path = data_dir / "pickup_points.json"
     with open(path, encoding="utf-8") as f:
@@ -44,7 +43,7 @@ def _load_slot_template(data_dir: Path) -> SlotTemplate:
     return SlotTemplate.model_validate(raw)
 
 
-def generate_slots(template: SlotTemplate, clock: datetime) -> List[DeliverySlot]:
+def generate_slots(template: SlotTemplate, clock: datetime) -> list[DeliverySlot]:
     """Build the 7-day slot grid (today → today + 6) from *template*.
 
     Args:
@@ -61,7 +60,7 @@ def generate_slots(template: SlotTemplate, clock: datetime) -> List[DeliverySlot
         for pb in template.pre_booked
     }
 
-    slots: List[DeliverySlot] = []
+    slots: list[DeliverySlot] = []
     for offset in range(7):
         day = today + timedelta(days=offset)
         date_str = day.isoformat()
@@ -80,7 +79,7 @@ def generate_slots(template: SlotTemplate, clock: datetime) -> List[DeliverySlot
     return slots
 
 
-def load_slots(data_dir: Path, clock: datetime) -> List[DeliverySlot]:
+def load_slots(data_dir: Path, clock: datetime) -> list[DeliverySlot]:
     """Load the slot template and generate the full slot grid.
 
     Convenience wrapper that calls ``_load_slot_template`` then

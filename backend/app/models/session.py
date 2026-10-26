@@ -13,7 +13,6 @@ from __future__ import annotations
 import enum
 import threading
 from datetime import date, datetime
-from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -42,14 +41,14 @@ class SlotMap(BaseModel):
     Slots are mutable; the slot filler and state machine update them.
     """
 
-    tracking_id: Optional[str] = None
+    tracking_id: str | None = None
     ambiguous_ids: list[str] = Field(default_factory=list)
-    phone_last4: Optional[str] = None
-    intended_date: Optional[date] = None
-    intended_period: Optional[str] = None
-    confirmed_slot_id: Optional[str] = None
-    pickup_point_id: Optional[str] = None
-    action_intent: Optional[str] = None
+    phone_last4: str | None = None
+    intended_date: date | None = None
+    intended_period: str | None = None
+    confirmed_slot_id: str | None = None
+    pickup_point_id: str | None = None
+    action_intent: str | None = None
     cancel_confirmed: bool = False
 
     # Verification flag.
@@ -59,14 +58,14 @@ class SlotMap(BaseModel):
 class DecisionTrace(BaseModel):
     """Debugging breadcrumbs for a single turn."""
 
-    intent: Optional[str] = None
-    intent_confidence: Optional[float] = None
-    runner_up: Optional[str] = None
-    runner_up_confidence: Optional[float] = None
+    intent: str | None = None
+    intent_confidence: float | None = None
+    runner_up: str | None = None
+    runner_up_confidence: float | None = None
     slots_extracted: dict[str, object] = Field(default_factory=dict)
-    state_before: Optional[str] = None
-    state_after: Optional[str] = None
-    rejection_reason: Optional[str] = None
+    state_before: str | None = None
+    state_after: str | None = None
+    rejection_reason: str | None = None
 
 
 class Turn(BaseModel):
@@ -74,7 +73,7 @@ class Turn(BaseModel):
 
     role: str  # "user" or "assistant"
     text: str
-    trace: Optional[DecisionTrace] = None
+    trace: DecisionTrace | None = None
 
 
 class Session(BaseModel):

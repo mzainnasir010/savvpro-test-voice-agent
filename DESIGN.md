@@ -14,6 +14,10 @@ call REDELIVER and:
 The assistant handles the entire conversation — from caller identification
 through to confirmation — without any human operator.
 
+This repository implements the deterministic backend and text-transcript API.
+It does not include a phone connection, speech-to-text provider, text-to-speech
+provider, or browser frontend; those components can call the session API.
+
 ## The Brain: How Decisions Are Made
 
 > **No LLM is used anywhere in the decision logic.** All intent detection,
@@ -66,7 +70,7 @@ and disambiguation rules handle ambiguous phrases ("no wait" →
 
 ### State Machine
 
-12 dialogue states with explicit transitions. Cross-cutting handlers for
+13 dialogue states with explicit transitions. Cross-cutting handlers for
 silence, repeat requests, human agent handoff, and goodbye are checked
 before state-specific logic.
 
@@ -90,3 +94,17 @@ All data is fake. No real people's details.
   happens in a single lock acquisition.
 - `InMemorySessionStore` has a store-level lock plus per-session locks
   for turn serialisation.
+
+### HTTP API
+
+FastAPI exposes `GET /health` and the session lifecycle:
+
+- `POST /sessions` starts a session and returns its ID and greeting.
+- `POST /sessions/{session_id}/turns` processes one transcript and returns
+  the reply, ended flag, and decision trace.
+- `GET /sessions/{session_id}` returns the current state and turn history.
+- `DELETE /sessions/{session_id}` marks the session ended.
+
+Sessions and parcel mutations are held in memory. Restarting the backend
+clears them. See `docs/BACKEND_GUIDE.md` for setup, sample requests, and the
+full HTTP contract.

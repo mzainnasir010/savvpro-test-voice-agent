@@ -18,7 +18,6 @@ import pytest
 
 from app.brain.normalizer import NormalizeResult, normalize
 
-
 # ── Happy path ────────────────────────────────────────────────────────
 
 

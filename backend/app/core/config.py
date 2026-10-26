@@ -8,7 +8,6 @@ result so the file is parsed at most once per process.
 from __future__ import annotations
 
 import functools
-from typing import List
 
 from pydantic import field_validator
 from pydantic_settings import BaseSettings
@@ -46,7 +45,7 @@ class Settings(BaseSettings):
         return v.upper()
 
     @property
-    def cors_origin_list(self) -> List[str]:
+    def cors_origin_list(self) -> list[str]:
         """Split the comma-separated ``CORS_ORIGINS`` string into a list."""
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
 

@@ -7,10 +7,8 @@ Both extractors operate on ``digit_text`` from :class:`NormalizeResult`
 from __future__ import annotations
 
 import re
-from typing import List, Optional
 
 from app.brain.constants import RD_PHONETIC_PREFIXES
-
 
 # ── Tracking ID extraction ────────────────────────────────────────────
 #
@@ -43,7 +41,7 @@ def _build_tracking_pattern() -> re.Pattern[str]:
 _TRACKING_RE = _build_tracking_pattern()
 
 
-def extract_tracking_ids(digit_text: str) -> List[str]:
+def extract_tracking_ids(digit_text: str) -> list[str]:
     """Extract tracking IDs from normalised digit text.
 
     Args:
@@ -53,7 +51,7 @@ def extract_tracking_ids(digit_text: str) -> List[str]:
         A list of canonical tracking IDs (``RD########``, uppercase) in
         order of appearance.  Empty list if none found.
     """
-    results: List[str] = []
+    results: list[str] = []
     for match in _TRACKING_RE.finditer(digit_text):
         raw_digits = match.group(1)
         # Strip all whitespace from the captured digit group.
@@ -71,8 +69,8 @@ _FOUR_DIGITS_RE = re.compile(r"\b(\d{4})\b")
 
 def extract_phone_last4(
     digit_text: str,
-    exclude_digits: Optional[str] = None,
-) -> Optional[str]:
+    exclude_digits: str | None = None,
+) -> str | None:
     """Extract the caller's last 4 phone digits from normalised digit text.
 
     Args:

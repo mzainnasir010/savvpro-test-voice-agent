@@ -7,7 +7,7 @@ Uses the real InMemoryParcelRepository and frozen clock.
 from __future__ import annotations
 
 import threading
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -17,7 +17,7 @@ from app.data.loader import load_parcels, load_pickup_points, load_slots
 from app.data.repository import InMemoryParcelRepository
 from app.models.session import DialogueState, Session
 
-CLOCK = datetime(2026, 10, 26, 14, 30, tzinfo=timezone.utc)
+CLOCK = datetime(2026, 10, 26, 14, 30, tzinfo=UTC)
 DATA_DIR = Path(__file__).resolve().parents[1] / "data"
 
 
@@ -56,7 +56,7 @@ class TestEdge1_ChangeDateMidFlow:
         session.slots.action_intent = "reschedule"
         session.slots.intended_date = (CLOCK + timedelta(days=1)).date()
 
-        r = _p(sm, session, "actually in 4 days")
+        _p(sm, session, "actually in 4 days")
         # Should reset period and re-enter date flow.
         assert session.slots.intended_period is None or session.state in (
             DialogueState.COLLECT_DATE,
@@ -72,7 +72,7 @@ class TestEdge1_ChangeDateMidFlow:
         session.slots.intended_period = "afternoon"
         session.slots.confirmed_slot_id = "SLOT-2026-10-28-afternoon"
 
-        r = _p(sm, session, "actually no")
+        _p(sm, session, "actually no")
         assert session.state in (
             DialogueState.CHOOSE_ACTION,
             DialogueState.COLLECT_DATE,
@@ -88,7 +88,7 @@ class TestEdge2_SwitchAction:
         session.slots.tracking_id = "RD30000001"
         session.slots.action_intent = "reschedule"
 
-        r = _p(sm, session, "on second thought let me do something else")
+        _p(sm, session, "on second thought let me do something else")
         assert session.state == DialogueState.CHOOSE_ACTION
         assert session.slots.action_intent is None
 
@@ -161,7 +161,7 @@ class TestEdge6_ParcelStatusBlocked:
         session.state = DialogueState.CHOOSE_ACTION
         session.slots.tracking_id = "RD40000001"  # delivered
         session.slots.verified = True
-        r = _p(sm, session, "cancel")
+        _p(sm, session, "cancel")
         assert session.state == DialogueState.CHOOSE_ACTION
 
 
@@ -267,7 +267,7 @@ class TestEdge11_Silence:
         # 2 unknowns then 1 silence — silence should NOT trigger END.
         _p(sm, session, "gibberish")
         _p(sm, session, "more gibberish")
-        r = _p(sm, session, "", silence=True)
+        _p(sm, session, "", silence=True)
         assert session.state != DialogueState.END
         assert session.silence_count == 1
         assert session.unknown_count == 2
@@ -318,7 +318,7 @@ class TestEdge13_CancelRequiresConfirm:
     def test_deny_cancel_returns_to_menu(self, sm, session, repo):
         session.state = DialogueState.CONFIRM_CANCEL
         session.slots.tracking_id = "RD30000001"
-        r = _p(sm, session, "no")
+        _p(sm, session, "no")
         assert session.state == DialogueState.CHOOSE_ACTION
         p = repo.get_parcel("RD30000001")
         assert p.status.value == "failed_attempt"  # NOT cancelled
@@ -340,7 +340,7 @@ class TestEdge14_AffirmDenyWrongState:
 
     def test_deny_in_collect_tracking(self, sm, session):
         session.state = DialogueState.COLLECT_TRACKING_ID
-        r = _p(sm, session, "no")
+        _p(sm, session, "no")
         assert session.state == DialogueState.COLLECT_TRACKING_ID
 
 
@@ -397,7 +397,7 @@ class TestEdge16_TwoTrackingIds:
 class TestEdge17_ConcurrentBooking:
     def test_two_threads_one_slot(self, repo):
         """Only one of two concurrent bookings should succeed."""
-        from app.services.booking import get_available_slots, book_slot
+        from app.services.booking import book_slot, get_available_slots
 
         tomorrow = CLOCK.date() + timedelta(days=2)
         slots = get_available_slots(repo, tomorrow, CLOCK)

@@ -18,16 +18,15 @@ import calendar
 import re
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
-from typing import Optional
 
 
 @dataclass(frozen=True, slots=True)
 class ParseResult:
     """Output of :func:`parse_date_and_period`."""
 
-    date: Optional[date] = None
-    period: Optional[str] = None
-    reason: Optional[str] = None  # "past", "out_of_range", "cutoff"
+    date: date | None = None
+    period: str | None = None
+    reason: str | None = None  # "past", "out_of_range", "cutoff"
 
 
 # ── Period detection ──────────────────────────────────────────────────
@@ -53,7 +52,7 @@ _PERIOD_CUTOFFS: dict[str, int] = {
 _PERIOD_ORDER = ["morning", "afternoon", "evening"]
 
 
-def _extract_period(text: str) -> Optional[str]:
+def _extract_period(text: str) -> str | None:
     """Extract a time-of-day period from *text*, or None."""
     if _MORNING_PATTERNS.search(text):
         return "morning"
@@ -106,7 +105,7 @@ def _find_next_weekday(today: date, target_dow: int) -> date:
     return today + timedelta(days=days_ahead)
 
 
-def _extract_date(text: str, today: date) -> Optional[date]:
+def _extract_date(text: str, today: date) -> date | None:
     """Extract a date from *text* relative to *today*, or None."""
 
     # "day after tomorrow" — must check before "tomorrow"
@@ -160,9 +159,9 @@ def _extract_date(text: str, today: date) -> Optional[date]:
     if m:
         month_name = m.group(1).lower()
         day_num = int(m.group(2))
-        month_num = list(
+        month_num = [
             calendar.month_name[i].lower() for i in range(1, 13)
-        ).index(month_name) + 1
+        ].index(month_name) + 1
         try:
             candidate = date(today.year, month_num, day_num)
         except ValueError:
@@ -214,7 +213,7 @@ def _validate_date(
     parsed_date: date,
     today: date,
     max_date: date,
-) -> Optional[str]:
+) -> str | None:
     """Return a rejection reason or None if the date is valid."""
     if parsed_date < today:
         return "past"
@@ -225,10 +224,10 @@ def _validate_date(
 
 def _check_cutoff(
     parsed_date: date,
-    period: Optional[str],
+    period: str | None,
     today: date,
     clock_hour: int,
-) -> Optional[str]:
+) -> str | None:
     """Return ``\"cutoff\"`` if the requested period has already passed today."""
     if parsed_date != today:
         return None

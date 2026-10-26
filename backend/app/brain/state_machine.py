@@ -13,7 +13,6 @@ Flow:
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional
 
 from app.brain.constants import (
     MESSAGES,
@@ -39,7 +38,6 @@ from app.services.cancellation import cancel_parcel
 from app.services.pickup import list_pickup_points
 from app.services.verification import verify_phone, verify_tracking_id
 
-
 # ── Helpers ───────────────────────────────────────────────────────────
 
 
@@ -59,7 +57,7 @@ def _format_date(d) -> str:
 class TurnResult:
     """Output of :meth:`StateMachine.process`."""
 
-    __slots__ = ("reply", "trace", "ended")
+    __slots__ = ("ended", "reply", "trace")
 
     def __init__(
         self,
@@ -657,7 +655,7 @@ class StateMachine:
         points = list_pickup_points(self._repo)
 
         # Try to match by ordinal number (1, 2, 3...).
-        digit_text = trace.slots_extracted.get("phone_last4", "")
+        trace.slots_extracted.get("phone_last4", "")
         # Also check the raw intent text for a number.
         for i, p in enumerate(points):
             name_lower = p.name.lower()

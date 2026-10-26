@@ -115,17 +115,58 @@
 
 ---
 
-## Next step
+## Completed steps (continued)
 
-### Step 10 — Session management and API endpoints
+### Step 10 — Session management and API endpoints ✅
 
-Build per PLAN.md §10:
+**Files created or updated:**
 
-1. `app/models/api.py` — request/response Pydantic models.
-2. `app/api/dependencies.py` — FastAPI dependency injection (repo, session store, clock).
-3. `app/api/routes/sessions.py` — `POST /sessions`, `POST /sessions/{id}/turns`, `GET /sessions/{id}`, `DELETE /sessions/{id}`.
-4. `tests/test_sessions_api.py` — HTTP-level tests.
-5. `tests/test_scenarios/` — multi-turn end-to-end conversation tests.
+| File | Purpose |
+|------|---------|
+| `app/models/api.py` | Request and response schemas for session creation, turns, and history |
+| `app/api/dependencies.py` | Lazy in-memory services and injectable UTC clock |
+| `app/api/routes/sessions.py` | Create session, process turns, read history, and end session endpoints |
+| `app/main.py` | Registers the sessions router |
+| `app/data/repository.py` | Session deletion marks the session ended and moves it to `END` |
+| `tests/test_sessions_api.py` | API contract, validation, history, silence, and deletion coverage |
+| `tests/test_scenarios/` | Full API workflows for status, rescheduling, pickup, and cancellation |
+
+**Test results:** `488 passed, 2 warnings`
+
+---
+
+### Step 11 — Postman collection and documentation ✅
+
+**Files created or updated:**
+
+| File | Purpose |
+|------|---------|
+| `docs/postman/redeliver.postman_collection.json` | Health request and ordered sample status-call workflow |
+| `README.md` | Current setup instructions, endpoints, tests, and project scope |
+| `DESIGN.md` | Final brain, data, thread-safety, and HTTP API overview |
+| `AI_USAGE.md` | Records Codex assistance, review corrections, and token-log availability |
+| `docs/BACKEND_GUIDE.md` | Operational guide, endpoint contract, sample call, configuration, and test instructions |
+
+Postman collection JSON validation passed. Full backend suite: `488 passed, 2 warnings`.
+
+---
+
+### Step 12 — Final pass ✅
+
+- `ruff check .` from `backend/`: all checks passed. Ruff findings were fixed,
+  including import formatting, unused assignments, and modernization rules.
+- Added focused dependency-provider and booking fallback coverage.
+- Full coverage run: `491 passed, 2 warnings`; overall application coverage is
+  `90%`.
+- Reviewed the README, design, AI usage notes, backend guide, and Postman
+  collection for consistency with the implemented transcript API.
+
+---
+
+## Build status
+
+Steps 1–12 are complete. The backend suite passes, lint is clean, and total
+application coverage meets the 90% target.
 
 ---
 
@@ -229,9 +270,9 @@ With coverage:
 d:\Projects\test\savvpro-test-voice-agent\backend\.venv\Scripts\python.exe -m pytest tests/ --cov=app --cov-report=term-missing
 ```
 
-**Latest result (Step 9):**
+**Latest result (Step 12):**
 ```
-478 passed, 2 warnings in 2.19s
+491 passed, 2 warnings; 90% total coverage
 ```
 
 ---
@@ -254,9 +295,11 @@ backend/
 │   ├── main.py                  ← Step 1
 │   ├── api/
 │   │   ├── __init__.py          ← Step 1
+│   │   ├── dependencies.py      ← Step 10
 │   │   └── routes/
 │   │       ├── __init__.py      ← Step 1
 │   │       └── health.py        ← Step 1
+│   │       └── sessions.py      ← Step 10
 │   ├── brain/
 │   │   ├── __init__.py          ← Step 3
 │   │   ├── constants.py         ← Step 3 / Step 6
@@ -278,7 +321,8 @@ backend/
 │   ├── models/
 │   │   ├── __init__.py          ← Step 2
 │   │   ├── parcel.py            ← Step 2
-│   │   └── session.py           ← Step 2 / Step 7
+│   │   ├── session.py           ← Step 2 / Step 7
+│   │   └── api.py               ← Step 10
 │   └── services/
 │       ├── __init__.py          ← Step 8
 │       ├── verification.py      ← Step 8
@@ -302,7 +346,10 @@ backend/
 │   ├── test_slot_filler.py      ← Step 7
 │   ├── test_state_machine.py    ← Step 7
 │   ├── test_services.py         ← Step 8
-│   └── test_edge_cases.py       ← Step 9
+│   ├── test_edge_cases.py       ← Step 9
+│   ├── test_api_dependencies.py ← Step 12
+│   ├── test_sessions_api.py     ← Step 10
+│   └── test_scenarios/          ← Step 10
 └── requirements.txt             ← Step 1 (modified)
 ```
 

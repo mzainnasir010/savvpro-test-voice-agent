@@ -11,9 +11,7 @@ Covers:
 
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
-
-import pytest
+from datetime import UTC, date, datetime
 
 from app.brain.normalizer import normalize
 from app.brain.slot_filler import (
@@ -30,7 +28,7 @@ from app.models.session import (
     Turn,
 )
 
-CLOCK = datetime(2026, 10, 26, 14, 30, tzinfo=timezone.utc)
+CLOCK = datetime(2026, 10, 26, 14, 30, tzinfo=UTC)
 
 
 # ── SlotMap defaults ──────────────────────────────────────────────────
@@ -120,14 +118,14 @@ class TestFillTrackingId:
         """In CONFIRM_TRACKING_ID, a new ID can be extracted (correction)."""
         sm = SlotMap(tracking_id="RD11111111")
         norm = normalize("no it's rd22222222")
-        extracted = fill_from_turn(sm, norm, CLOCK, "CONFIRM_TRACKING_ID")
+        fill_from_turn(sm, norm, CLOCK, "CONFIRM_TRACKING_ID")
         assert sm.tracking_id == "RD22222222"
 
     def test_tracking_not_extracted_in_wrong_state(self):
         """In VERIFY_PHONE, tracking ID extraction should NOT happen."""
         sm = SlotMap()
         norm = normalize("rd12345678")
-        extracted = fill_from_turn(sm, norm, CLOCK, "VERIFY_PHONE")
+        fill_from_turn(sm, norm, CLOCK, "VERIFY_PHONE")
         assert sm.tracking_id is None
 
 
@@ -147,14 +145,14 @@ class TestFillPhone:
         be excluded."""
         sm = SlotMap(tracking_id="RD12345678")
         norm = normalize("3456")
-        extracted = fill_from_turn(sm, norm, CLOCK, "VERIFY_PHONE")
+        fill_from_turn(sm, norm, CLOCK, "VERIFY_PHONE")
         # "3456" is a substring of "12345678" → excluded
         assert sm.phone_last4 is None
 
     def test_phone_not_extracted_in_wrong_state(self):
         sm = SlotMap(tracking_id="RD12345678")
         norm = normalize("1234")
-        extracted = fill_from_turn(sm, norm, CLOCK, "COLLECT_DATE")
+        fill_from_turn(sm, norm, CLOCK, "COLLECT_DATE")
         assert sm.phone_last4 is None
 
 
@@ -165,21 +163,21 @@ class TestFillDatePeriod:
     def test_date_and_period(self):
         sm = SlotMap()
         norm = normalize("tomorrow morning")
-        extracted = fill_from_turn(sm, norm, CLOCK, "COLLECT_DATE")
+        fill_from_turn(sm, norm, CLOCK, "COLLECT_DATE")
         assert sm.intended_date == date(2026, 10, 27)
         assert sm.intended_period == "morning"
 
     def test_date_only(self):
         sm = SlotMap()
         norm = normalize("tomorrow")
-        extracted = fill_from_turn(sm, norm, CLOCK, "COLLECT_DATE")
+        fill_from_turn(sm, norm, CLOCK, "COLLECT_DATE")
         assert sm.intended_date == date(2026, 10, 27)
         assert sm.intended_period is None
 
     def test_period_only_in_collect_period(self):
         sm = SlotMap(intended_date=date(2026, 10, 27))
         norm = normalize("evening please")
-        extracted = fill_from_turn(sm, norm, CLOCK, "COLLECT_PERIOD")
+        fill_from_turn(sm, norm, CLOCK, "COLLECT_PERIOD")
         assert sm.intended_period == "evening"
 
     def test_date_rejected_past(self):
@@ -201,7 +199,7 @@ class TestFillDatePeriod:
     def test_date_not_extracted_in_wrong_state(self):
         sm = SlotMap()
         norm = normalize("tomorrow morning")
-        extracted = fill_from_turn(sm, norm, CLOCK, "VERIFY_PHONE")
+        fill_from_turn(sm, norm, CLOCK, "VERIFY_PHONE")
         assert sm.intended_date is None
         assert sm.intended_period is None
 

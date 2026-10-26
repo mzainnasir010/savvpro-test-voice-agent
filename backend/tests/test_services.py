@@ -6,7 +6,7 @@ deterministic testing.
 
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -24,7 +24,7 @@ from app.services.cancellation import cancel_parcel
 from app.services.pickup import get_pickup_point, list_pickup_points
 from app.services.verification import verify_phone, verify_tracking_id
 
-CLOCK = datetime(2026, 10, 26, 14, 30, tzinfo=timezone.utc)
+CLOCK = datetime(2026, 10, 26, 14, 30, tzinfo=UTC)
 TODAY = CLOCK.date()
 DATA_DIR = Path(__file__).resolve().parents[1] / "data"
 
@@ -160,6 +160,21 @@ class TestFindNearestAvailable:
         slot = find_nearest_available(repo, CLOCK, period="evening")
         assert slot is not None
         assert slot.period == "evening"
+
+    def test_falls_back_to_any_period_when_requested_period_is_unavailable(self, repo):
+        slot = find_nearest_available(
+            repo, CLOCK, exclude_date=TODAY, period="unavailable-period"
+        )
+        assert slot is not None
+
+    def test_returns_none_when_repository_has_no_slots(self):
+        class EmptySlots:
+            def list_slots(self, start, end):
+                return []
+
+        assert find_nearest_available(
+            EmptySlots(), CLOCK, period="morning"
+        ) is None
 
 
 # ── Pickup service ────────────────────────────────────────────────────

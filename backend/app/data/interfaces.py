@@ -9,11 +9,9 @@ from __future__ import annotations
 
 import abc
 from datetime import date
-from typing import List, Optional
 
 from app.models.parcel import DeliverySlot, Parcel, PickupPoint
 from app.models.session import Session
-
 
 # ── Parcel repository ─────────────────────────────────────────────────
 
@@ -23,17 +21,17 @@ class IParcelRepository(abc.ABC):
     # -- Parcels --------------------------------------------------------
 
     @abc.abstractmethod
-    def get_parcel(self, tracking_id: str) -> Optional[Parcel]:
+    def get_parcel(self, tracking_id: str) -> Parcel | None:
         """Return the parcel or ``None`` if not found."""
 
     # -- Slots ----------------------------------------------------------
 
     @abc.abstractmethod
-    def list_slots(self, start: date, end: date) -> List[DeliverySlot]:
+    def list_slots(self, start: date, end: date) -> list[DeliverySlot]:
         """Return slots whose date is in ``[start, end]`` inclusive."""
 
     @abc.abstractmethod
-    def get_slot(self, slot_id: str) -> Optional[DeliverySlot]:
+    def get_slot(self, slot_id: str) -> DeliverySlot | None:
         """Return a single slot by ID or ``None``."""
 
     @abc.abstractmethod
@@ -64,14 +62,14 @@ class IParcelRepository(abc.ABC):
 
     @abc.abstractmethod
     def list_pickup_points(
-        self, open_on: Optional[date] = None
-    ) -> List[PickupPoint]:
+        self, open_on: date | None = None
+    ) -> list[PickupPoint]:
         """Return all pickup points, optionally filtered to those open on
         *open_on*.
         """
 
     @abc.abstractmethod
-    def get_pickup_point(self, point_id: str) -> Optional[PickupPoint]:
+    def get_pickup_point(self, point_id: str) -> PickupPoint | None:
         """Return a single pickup point by ID or ``None``."""
 
     # -- Parcel lifecycle -----------------------------------------------
@@ -110,7 +108,7 @@ class ISessionStore(abc.ABC):
         """Create a new session and return it."""
 
     @abc.abstractmethod
-    def get_session(self, session_id: str) -> Optional[Session]:
+    def get_session(self, session_id: str) -> Session | None:
         """Return the session or ``None`` if not found."""
 
     @abc.abstractmethod

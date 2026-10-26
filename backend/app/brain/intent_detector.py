@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Optional
 
 from app.brain.constants import (
     AMBIGUITY_MARGIN,
@@ -38,8 +37,8 @@ class IntentResult:
 
     intent: str
     confidence: float
-    runner_up: Optional[str] = None
-    runner_up_confidence: Optional[float] = None
+    runner_up: str | None = None
+    runner_up_confidence: float | None = None
 
 
 def _score_intent(intent: str, text: str) -> float:
@@ -69,7 +68,7 @@ def _score_intent(intent: str, text: str) -> float:
     return min(score, 1.0)
 
 
-def _apply_disambiguation(text: str) -> Optional[IntentResult]:
+def _apply_disambiguation(text: str) -> IntentResult | None:
     """Check disambiguation rules; return a forced result or None.
 
     Rules (applied to text BEFORE general scoring):
@@ -92,7 +91,7 @@ def _apply_disambiguation(text: str) -> Optional[IntentResult]:
 
 def detect_intent(
     intent_text: str,
-    state: Optional[str] = None,
+    state: str | None = None,
 ) -> IntentResult:
     """Detect the caller's intent from normalised text.
 
@@ -129,8 +128,8 @@ def detect_intent(
     scores.sort(key=lambda x: x[1], reverse=True)
 
     best_intent, best_score = scores[0]
-    runner_up_intent: Optional[str] = None
-    runner_up_score: Optional[float] = None
+    runner_up_intent: str | None = None
+    runner_up_score: float | None = None
 
     if len(scores) > 1:
         runner_up_intent, runner_up_score = scores[1]

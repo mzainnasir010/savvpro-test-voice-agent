@@ -18,7 +18,6 @@ import pytest
 
 from app.brain.intent_detector import IntentResult, detect_intent
 
-
 # ── Happy path per intent ─────────────────────────────────────────────
 
 

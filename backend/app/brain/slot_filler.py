@@ -7,7 +7,6 @@ This module never reads the system clock.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional
 
 from app.brain.date_parser import parse_date_and_period
 from app.brain.extractor import extract_phone_last4, extract_tracking_ids

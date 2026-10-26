@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Optional
-
 from app.data.interfaces import IParcelRepository
 from app.models.parcel import Parcel
 
@@ -11,7 +9,7 @@ from app.models.parcel import Parcel
 def verify_tracking_id(
     repo: IParcelRepository,
     tracking_id: str,
-) -> Optional[Parcel]:
+) -> Parcel | None:
     """Look up a tracking ID in the repository.
 
     Returns the :class:`Parcel` if found, or ``None``.

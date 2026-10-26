@@ -3,11 +3,9 @@
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Optional
 
 from app.data.interfaces import IParcelRepository
 from app.models.parcel import DeliverySlot
-
 
 # Period cutoff hours — same as in date_parser, kept here for the
 # "is this period past?" check on today's slots.
@@ -22,7 +20,7 @@ def get_available_slots(
     repo: IParcelRepository,
     target_date: date,
     clock: datetime,
-    period: Optional[str] = None,
+    period: str | None = None,
 ) -> list[DeliverySlot]:
     """Return available (non-full) slots for *target_date*.
 
@@ -66,9 +64,9 @@ def get_available_slots(
 def find_nearest_available(
     repo: IParcelRepository,
     clock: datetime,
-    exclude_date: Optional[date] = None,
-    period: Optional[str] = None,
-) -> Optional[DeliverySlot]:
+    exclude_date: date | None = None,
+    period: str | None = None,
+) -> DeliverySlot | None:
     """Find the nearest available slot across the 7-day window.
 
     Optionally excludes a specific date and/or filters by period.

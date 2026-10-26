@@ -15,8 +15,7 @@ from __future__ import annotations
 
 import threading
 import uuid
-from datetime import date, datetime, timezone
-from typing import Dict, List, Optional
+from datetime import UTC, date, datetime
 
 from app.core.logging import get_logger
 from app.data.interfaces import IParcelRepository, ISessionStore
@@ -26,7 +25,7 @@ from app.models.parcel import (
     ParcelStatus,
     PickupPoint,
 )
-from app.models.session import Session
+from app.models.session import DialogueState, Session
 
 log = get_logger(__name__)
 
@@ -45,35 +44,35 @@ class InMemoryParcelRepository(IParcelRepository):
 
     def __init__(
         self,
-        parcels: List[Parcel],
-        slots: List[DeliverySlot],
-        pickup_points: List[PickupPoint],
+        parcels: list[Parcel],
+        slots: list[DeliverySlot],
+        pickup_points: list[PickupPoint],
         max_phone_attempts: int = 3,
     ) -> None:
         self._lock = threading.Lock()
         self._max_phone_attempts = max_phone_attempts
 
         # Index by primary key for O(1) lookup.
-        self._parcels: Dict[str, Parcel] = {p.tracking_id: p for p in parcels}
-        self._slots: Dict[str, DeliverySlot] = {s.slot_id: s for s in slots}
-        self._pickup_points: Dict[str, PickupPoint] = {
+        self._parcels: dict[str, Parcel] = {p.tracking_id: p for p in parcels}
+        self._slots: dict[str, DeliverySlot] = {s.slot_id: s for s in slots}
+        self._pickup_points: dict[str, PickupPoint] = {
             pp.point_id: pp for pp in pickup_points
         }
 
     # -- Parcels --------------------------------------------------------
 
-    def get_parcel(self, tracking_id: str) -> Optional[Parcel]:
+    def get_parcel(self, tracking_id: str) -> Parcel | None:
         return self._parcels.get(tracking_id)
 
     # -- Slots ----------------------------------------------------------
 
-    def list_slots(self, start: date, end: date) -> List[DeliverySlot]:
+    def list_slots(self, start: date, end: date) -> list[DeliverySlot]:
         return [
             s for s in self._slots.values()
             if start <= s.date <= end
         ]
 
-    def get_slot(self, slot_id: str) -> Optional[DeliverySlot]:
+    def get_slot(self, slot_id: str) -> DeliverySlot | None:
         return self._slots.get(slot_id)
 
     def book_slot(self, slot_id: str, tracking_id: str) -> bool:
@@ -147,14 +146,14 @@ class InMemoryParcelRepository(IParcelRepository):
     # -- Pickup points --------------------------------------------------
 
     def list_pickup_points(
-        self, open_on: Optional[date] = None
-    ) -> List[PickupPoint]:
+        self, open_on: date | None = None
+    ) -> list[PickupPoint]:
         points = list(self._pickup_points.values())
         if open_on is not None:
             points = [pp for pp in points if pp.is_open_on(open_on)]
         return points
 
-    def get_pickup_point(self, point_id: str) -> Optional[PickupPoint]:
+    def get_pickup_point(self, point_id: str) -> PickupPoint | None:
         return self._pickup_points.get(point_id)
 
     # -- Parcel lifecycle -----------------------------------------------
@@ -200,18 +199,18 @@ class InMemorySessionStore(ISessionStore):
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
-        self._sessions: Dict[str, Session] = {}
+        self._sessions: dict[str, Session] = {}
 
     def create_session(self) -> Session:
         session = Session(
             session_id=str(uuid.uuid4()),
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
         with self._lock:
             self._sessions[session.session_id] = session
         return session
 
-    def get_session(self, session_id: str) -> Optional[Session]:
+    def get_session(self, session_id: str) -> Session | None:
         return self._sessions.get(session_id)
 
     def save_session(self, session: Session) -> None:
@@ -223,3 +222,4 @@ class InMemorySessionStore(ISessionStore):
             session = self._sessions.get(session_id)
             if session is not None:
                 session.ended = True
+                session.state = DialogueState.END

@@ -9,10 +9,8 @@ from __future__ import annotations
 
 import enum
 from datetime import date
-from typing import List, Optional
 
 from pydantic import BaseModel, Field
-
 
 # ── Enums ─────────────────────────────────────────────────────────────
 
@@ -49,7 +47,7 @@ class Parcel(BaseModel):
     phone_last4: str
     recipient_name: str
     status: ParcelStatus
-    current_slot_id: Optional[str] = None
+    current_slot_id: str | None = None
 
     # Runtime-only fields (not in parcels.json)
     phone_failures: int = Field(default=0, exclude=True)
@@ -85,7 +83,7 @@ class PickupPoint(BaseModel):
     point_id: str
     name: str
     address: str
-    open_days: List[str]
+    open_days: list[str]
     open_hours: str
 
     def is_open_on(self, day: date) -> bool:
@@ -113,4 +111,4 @@ class SlotTemplate(BaseModel):
     """
 
     default_capacity: int = 3
-    pre_booked: List[PreBookedEntry] = Field(default_factory=list)
+    pre_booked: list[PreBookedEntry] = Field(default_factory=list)

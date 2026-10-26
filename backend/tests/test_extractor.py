@@ -18,7 +18,6 @@ import pytest
 
 from app.brain.extractor import extract_phone_last4, extract_tracking_ids
 
-
 # ── Tracking ID — happy path ─────────────────────────────────────────
 
 

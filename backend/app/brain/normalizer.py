@@ -17,12 +17,12 @@ import string
 from dataclasses import dataclass
 
 from app.brain.constants import (
+    _WORD_TO_SINGLE_DIGIT,
     DOUBLE_TRIPLE_PATTERN,
     FILLER_WORDS,
     MAX_INPUT_LENGTH,
     NUMBER_WORD_MAP,
     OH_DIGIT_CONTEXT,
-    _WORD_TO_SINGLE_DIGIT,
 )
 
 

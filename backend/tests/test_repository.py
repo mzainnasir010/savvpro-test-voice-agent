@@ -7,7 +7,7 @@ dates are deterministic.
 from __future__ import annotations
 
 import threading
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -26,7 +26,6 @@ from app.models.parcel import (
     Period,
     PickupPoint,
     SlotTemplate,
-    PreBookedEntry,
 )
 
 DATA_DIR = Path(__file__).resolve().parents[1] / "data"
@@ -37,7 +36,7 @@ DATA_DIR = Path(__file__).resolve().parents[1] / "data"
 @pytest.fixture()
 def clock() -> datetime:
     """Monday 2026-10-26 14:30 UTC — same as frozen_clock in conftest."""
-    return datetime(2026, 10, 26, 14, 30, tzinfo=timezone.utc)
+    return datetime(2026, 10, 26, 14, 30, tzinfo=UTC)
 
 
 @pytest.fixture()

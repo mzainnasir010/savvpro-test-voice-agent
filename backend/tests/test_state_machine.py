@@ -5,7 +5,7 @@ Uses the real InMemoryParcelRepository and frozen clock.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -15,7 +15,7 @@ from app.data.loader import load_parcels, load_pickup_points, load_slots
 from app.data.repository import InMemoryParcelRepository
 from app.models.session import DialogueState, Session
 
-CLOCK = datetime(2026, 10, 26, 14, 30, tzinfo=timezone.utc)
+CLOCK = datetime(2026, 10, 26, 14, 30, tzinfo=UTC)
 DATA_DIR = Path(__file__).resolve().parents[1] / "data"
 
 
@@ -76,7 +76,7 @@ class TestSilence:
 
     def test_empty_text_treated_as_silence(self, sm, session):
         session.state = DialogueState.COLLECT_TRACKING_ID
-        r = _process(sm, session, "   ")
+        _process(sm, session, "   ")
         assert session.silence_count >= 1
 
     def test_silence_counter_resets_on_speech(self, sm, session):
@@ -167,7 +167,7 @@ class TestConfirmTrackingId:
     def test_deny_goes_back(self, sm, session):
         session.state = DialogueState.CONFIRM_TRACKING_ID
         session.slots.tracking_id = "RD10000001"
-        r = _process(sm, session, "no")
+        _process(sm, session, "no")
         assert session.state == DialogueState.COLLECT_TRACKING_ID
 
 
@@ -223,7 +223,7 @@ class TestChooseAction:
 
     def test_cancel(self, sm, session):
         self._setup_verified(session)
-        r = _process(sm, session, "cancel")
+        _process(sm, session, "cancel")
         assert session.state == DialogueState.CONFIRM_CANCEL
 
     def test_status(self, sm, session):
@@ -273,7 +273,7 @@ class TestCollectDate:
 
     def test_change_of_mind(self, sm, session):
         self._setup(session)
-        r = _process(sm, session, "actually no")
+        _process(sm, session, "actually no")
         assert session.state == DialogueState.CHOOSE_ACTION
 
     def test_past_date(self, sm, session):
@@ -314,7 +314,7 @@ class TestDeliverStatus:
     def test_status_returns_to_menu(self, sm, session):
         session.state = DialogueState.DELIVER_STATUS
         session.slots.tracking_id = "RD10000001"
-        r = _process(sm, session, "")
+        _process(sm, session, "")
         # Empty input → silence in this case, but let's test with text.
 
     def test_status_shows_and_asks_else(self, sm, session):
