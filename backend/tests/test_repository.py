@@ -7,7 +7,7 @@ dates are deterministic.
 from __future__ import annotations
 
 import threading
-from datetime import UTC, date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -35,8 +35,8 @@ DATA_DIR = Path(__file__).resolve().parents[1] / "data"
 
 @pytest.fixture()
 def clock() -> datetime:
-    """Monday 2026-10-26 14:30 UTC — same as frozen_clock in conftest."""
-    return datetime(2026, 10, 26, 14, 30, tzinfo=UTC)
+    """Monday 2026-10-26 14:30 PKT — same as frozen_clock in conftest."""
+    return datetime(2026, 10, 26, 14, 30, tzinfo=timezone(timedelta(hours=5), name="PKT"))
 
 
 @pytest.fixture()
@@ -445,7 +445,7 @@ class TestPickupPoints:
     def test_get_by_id(self, repo: InMemoryParcelRepository):
         pp = repo.get_pickup_point("PP-001")
         assert pp is not None
-        assert pp.name == "Westside Depot"
+        assert pp.name == "Islamabad I-8 Markaz Depot"
 
     def test_get_not_found(self, repo: InMemoryParcelRepository):
         assert repo.get_pickup_point("PP-999") is None
@@ -457,24 +457,24 @@ class TestPickupPoints:
         assert len(open_pts) == 5
 
     def test_filter_open_on_sunday(self, repo: InMemoryParcelRepository):
-        """On Sunday only PP-002 (Central Hub, 7-day) should be open."""
+        """On Sunday only the Lahore hub (7-day) should be open."""
         sunday = date(2026, 11, 1)
         open_pts = repo.list_pickup_points(open_on=sunday)
         names = [pp.name for pp in open_pts]
-        assert "Central Hub" in names
-        # Westside Depot and Riverside are weekday-only.
-        assert "Westside Depot" not in names
-        assert "Riverside Collection Point" not in names
+        assert "Lahore Gulberg Collection Hub" in names
+        # Islamabad and Peshawar points are weekday-only.
+        assert "Islamabad I-8 Markaz Depot" not in names
+        assert "Peshawar University Road Collection Point" not in names
 
     def test_filter_open_on_saturday(self, repo: InMemoryParcelRepository):
-        """On Saturday: Central Hub, Northgate, and Eastend should be open."""
+        """On Saturday, Lahore, Karachi, and Rawalpindi points should be open."""
         saturday = date(2026, 10, 31)
         open_pts = repo.list_pickup_points(open_on=saturday)
         names = {pp.name for pp in open_pts}
-        assert "Central Hub" in names
-        assert "Northgate Post Office" in names
-        assert "Eastend Mini Depot" in names
-        assert "Westside Depot" not in names
+        assert "Lahore Gulberg Collection Hub" in names
+        assert "Karachi Clifton Express Desk" in names
+        assert "Rawalpindi Saddar Mini Depot" in names
+        assert "Islamabad I-8 Markaz Depot" not in names
 
     def test_pickup_point_is_open_on_method(self):
         pp = PickupPoint(

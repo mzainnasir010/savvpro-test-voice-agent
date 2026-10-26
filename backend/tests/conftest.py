@@ -8,7 +8,7 @@ Provides:
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -47,9 +47,12 @@ def client(frozen_clock: datetime) -> TestClient:
 def frozen_clock() -> datetime:
     """A fixed point in time used by all date/time-sensitive tests.
 
-    Monday 2026-10-26 14:30 UTC.
+    Monday 2026-10-26 14:30 Pakistan Standard Time.
     """
-    return datetime(2026, 10, 26, 14, 30, tzinfo=UTC)
+    return datetime(
+        2026, 10, 26, 14, 30,
+        tzinfo=timezone(timedelta(hours=5), name="PKT"),
+    )
 
 
 @pytest.fixture()

@@ -6,7 +6,7 @@ deterministic testing.
 
 from __future__ import annotations
 
-from datetime import UTC, date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -24,7 +24,7 @@ from app.services.cancellation import cancel_parcel
 from app.services.pickup import get_pickup_point, list_pickup_points
 from app.services.verification import verify_phone, verify_tracking_id
 
-CLOCK = datetime(2026, 10, 26, 14, 30, tzinfo=UTC)
+CLOCK = datetime(2026, 10, 26, 14, 30, tzinfo=timezone(timedelta(hours=5), name="PKT"))
 TODAY = CLOCK.date()
 DATA_DIR = Path(__file__).resolve().parents[1] / "data"
 

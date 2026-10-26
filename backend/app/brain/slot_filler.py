@@ -54,9 +54,11 @@ def fill_from_turn(
 
     # ── Phone last 4 ─────────────────────────────────────────────────
     if state == "VERIFY_PHONE":
-        # Exclude the trailing 8 digits of the tracking ID.
-        exclude = slot_map.tracking_id[2:] if slot_map.tracking_id else None
-        last4 = extract_phone_last4(norm.digit_text, exclude_digits=exclude)
+        # The tracking ID was provided on an earlier turn. Excluding its digits
+        # here would reject a valid phone number such as 1234 whenever it also
+        # appears inside that ID. Any ID present in this turn is filtered by
+        # the extractor's tracking-ID span check.
+        last4 = extract_phone_last4(norm.digit_text)
         if last4:
             slot_map.phone_last4 = last4
             extracted["phone_last4"] = last4

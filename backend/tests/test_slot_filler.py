@@ -11,7 +11,7 @@ Covers:
 
 from __future__ import annotations
 
-from datetime import UTC, date, datetime
+from datetime import date, datetime, timedelta, timezone
 
 from app.brain.normalizer import normalize
 from app.brain.slot_filler import (
@@ -28,7 +28,7 @@ from app.models.session import (
     Turn,
 )
 
-CLOCK = datetime(2026, 10, 26, 14, 30, tzinfo=UTC)
+CLOCK = datetime(2026, 10, 26, 14, 30, tzinfo=timezone(timedelta(hours=5), name="PKT"))
 
 
 # ── SlotMap defaults ──────────────────────────────────────────────────
@@ -140,14 +140,12 @@ class TestFillPhone:
         assert sm.phone_last4 == "9012"
         assert extracted["phone_last4"] == "9012"
 
-    def test_phone_excludes_tracking_digits(self):
-        """Phone digits that are a substring of the tracking ID should
-        be excluded."""
+    def test_phone_may_overlap_tracking_digits_on_separate_turn(self):
+        """A separate phone turn may contain digits from the tracking ID."""
         sm = SlotMap(tracking_id="RD12345678")
         norm = normalize("3456")
         fill_from_turn(sm, norm, CLOCK, "VERIFY_PHONE")
-        # "3456" is a substring of "12345678" → excluded
-        assert sm.phone_last4 is None
+        assert sm.phone_last4 == "3456"
 
     def test_phone_not_extracted_in_wrong_state(self):
         sm = SlotMap(tracking_id="RD12345678")
@@ -237,14 +235,17 @@ class TestMissingSlots:
 
 
 class TestDialogueState:
-    def test_all_13_states(self):
-        assert len(DialogueState) == 13
+    def test_all_14_states(self):
+        assert len(DialogueState) == 14
 
     def test_greeting(self):
         assert DialogueState.GREETING.value == "GREETING"
 
     def test_end(self):
         assert DialogueState.END.value == "END"
+
+    def test_anything_else(self):
+        assert DialogueState.ANYTHING_ELSE.value == "ANYTHING_ELSE"
 
 
 # ── Session model ─────────────────────────────────────────────────────

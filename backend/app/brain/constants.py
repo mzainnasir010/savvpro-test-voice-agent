@@ -189,6 +189,9 @@ MESSAGES: dict[str, str] = {
         "Your parcel is currently {status}. "
         "That action is not available right now."
     ),
+    "status_explanation": (
+        "{explanation} {available_actions} What would you like to do?"
+    ),
     "ask_date": (
         "What date works for you? I can book within the next 7 days."
     ),
@@ -217,32 +220,44 @@ MESSAGES: dict[str, str] = {
         "Please choose a later time or another day."
     ),
     "booked": (
-        "Booked. Delivery on {date}, {period}. Goodbye."
+        "Booked. Delivery on {date}, {period}. {anything_else}"
     ),
     "rebooked": (
-        "Rebooked. Your new delivery is {date}, {period}. Goodbye."
+        "Rebooked. Your new delivery is {date}, {period}. {anything_else}"
     ),
     "list_pickup_points": (
-        "Here are the pickup points: {points_list}. "
-        "Which one would you like?"
+        "Here are the pickup points:\n\n{points_list}\n\n"
+        "Choose by number, city, or pickup-point name. Which one would you like?"
+    ),
+    "pickup_point_ambiguous": (
+        "I heard more than one location. Please say one city or pickup-point name."
     ),
     "confirm_pickup": (
-        "You chose {name} at {address}. Is that right?"
+        "You chose {name} at {address}. It is open {open_hours} PKT. Is that right?"
     ),
     "pickup_done": (
-        "Noted. Please collect from {name}. Goodbye."
+        "Noted. Please collect from {name}. {anything_else}"
     ),
     "confirm_cancel": (
         "Are you sure you want to cancel your delivery? Say yes to confirm."
     ),
     "cancelled": (
-        "Your delivery has been cancelled. Goodbye."
+        "Your delivery has been cancelled. {anything_else}"
     ),
     "cancel_denied": (
         "OK, not cancelled. What else can I help with?"
     ),
     "anything_else": (
-        "Is there anything else I can help you with?"
+        "Is there anything else you would like help with? "
+        "Say yes to continue, or no to end the call."
+    ),
+    "anything_else_continue": (
+        "Sure. What would you like to do? "
+        "Reschedule, pick up from a point, cancel, or check status?"
+    ),
+    "anything_else_clarify": (
+        "Please say yes if you need help with something else, "
+        "or no if you are done."
     ),
     "change_of_mind_menu": (
         "No problem. What would you like to do instead?"
@@ -264,8 +279,20 @@ MESSAGES: dict[str, str] = {
         "You can say reschedule, pick up, cancel, or status."
     ),
     "unknown_3": (
-        "I am having trouble understanding. "
-        "Let me transfer you to a human agent. Goodbye."
+        "I'm still not sure what you need. You can ask about your parcel, "
+        "check its status, reschedule, choose pickup, or cancel."
+    ),
+    "unknown_4": (
+        "I may have misunderstood. Please try saying that another way, "
+        "or tell me which delivery option you need."
+    ),
+    "offer_human": (
+        "I'm still having trouble understanding. Would you like me to "
+        "transfer you to a human agent? Please say yes or no."
+    ),
+    "human_declined": (
+        "Okay, I will not transfer you. Let's keep going. "
+        "Please try saying that another way."
     ),
     "stt_low_confidence": (
         "I did not quite catch that. Could you say that again?"
@@ -296,10 +323,23 @@ MESSAGES: dict[str, str] = {
 INTENT_KEYWORDS: dict[str, list[tuple[str, float]]] = {
     "reschedule": [
         ("reschedule", 1.0),
+        ("rescheduling", 1.0),
+        ("rescheduled", 1.0),
+        ("re schedule", 1.0),
+        ("free schedule", 1.0),
+        ("residual", 0.8),
+        ("reach casual late", 1.0),
+        ("reach schedule", 1.0),
+        ("reset your late", 1.0),
+        ("reset delivery", 1.0),
         ("rebook", 1.0),
+        ("schedule again", 1.0),
         ("new date", 1.0),
         ("new time", 1.0),
         ("change delivery", 1.0),
+        ("change my delivery", 1.0),
+        ("change delivery date", 1.0),
+        ("move my delivery", 1.0),
         ("different day", 1.0),
         ("another day", 1.0),
         ("book again", 1.0),
@@ -309,6 +349,10 @@ INTENT_KEYWORDS: dict[str, list[tuple[str, float]]] = {
     "pickup_point": [
         ("pickup point", 1.0),
         ("pick up point", 1.0),
+        ("pick up", 1.0),
+        ("want to pick up", 1.0),
+        ("like to pick up", 1.0),
+        ("pick up my parcel", 1.0),
         ("collection point", 1.0),
         ("pick it up", 1.0),
         ("collect it", 1.0),
@@ -337,6 +381,13 @@ INTENT_KEYWORDS: dict[str, list[tuple[str, float]]] = {
         ("status", 0.5),
         ("tracking", 0.5),
         ("where is it", 0.5),
+    ],
+    "explain_status": [
+        ("what does failed attempt mean", 1.0),
+        ("what does fail attempt mean", 1.0),
+        ("what is failed attempt", 1.0),
+        ("what does this status mean", 1.0),
+        ("explain failed attempt", 1.0),
     ],
     "affirm": [
         ("yes please", 1.0),
@@ -400,6 +451,7 @@ INTENT_KEYWORDS: dict[str, list[tuple[str, float]]] = {
         ("goodbye for now", 1.0),
         ("thanks that's all", 1.0),
         ("i'm all done", 1.0),
+        ("all from my side", 0.9),
         ("thanks bye", 1.0),
         ("bye", 0.5),
         ("goodbye", 0.5),
@@ -417,10 +469,13 @@ INTENT_KEYWORDS: dict[str, list[tuple[str, float]]] = {
 
 INTENT_REGEX_PATTERNS: dict[str, list[tuple[re.Pattern[str], float]]] = {
     "reschedule": [
+        (re.compile(r"\bre[\s-]?schedule(?:d|s|ing)?\b", re.IGNORECASE), 1.0),
+        (re.compile(r"\b(?:move|change)\b.*\b(delivery|date|time|day)\b", re.IGNORECASE), 0.9),
         (re.compile(r"deliver.*again", re.IGNORECASE), 0.8),
         (re.compile(r"(new|different)\s+(day|date|time|slot)", re.IGNORECASE), 0.8),
     ],
     "pickup_point": [
+        (re.compile(r"\bpick\s+up\b", re.IGNORECASE), 1.0),
         (re.compile(r"pick\s*up\s*point", re.IGNORECASE), 0.8),
         (re.compile(r"collect\s*(it|from)", re.IGNORECASE), 0.8),
     ],
@@ -431,6 +486,9 @@ INTENT_REGEX_PATTERNS: dict[str, list[tuple[re.Pattern[str], float]]] = {
     "status": [
         (re.compile(r"where\s+(is|are)\s+(my|the)", re.IGNORECASE), 0.8),
         (re.compile(r"(what|how).*(status|update)", re.IGNORECASE), 0.8),
+    ],
+    "explain_status": [
+        (re.compile(r"\bwhat\s+(?:does|is)\b.*\b(?:fail(?:ed)?\s+attempt|status)\b.*\bmean\b", re.IGNORECASE), 1.0),
     ],
     "affirm": [
         (re.compile(r"\byes\b", re.IGNORECASE), 0.5),
@@ -452,7 +510,19 @@ INTENT_REGEX_PATTERNS: dict[str, list[tuple[re.Pattern[str], float]]] = {
     "goodbye": [
         (re.compile(r"^(bye|goodbye)$", re.IGNORECASE), 0.8),
         (re.compile(r"that'?s\s+all", re.IGNORECASE), 0.8),
+        (re.compile(r"\ball\s+from\s+my\s+side\b", re.IGNORECASE), 0.9),
     ],
+}
+
+# Plain-language explanations are returned by the backend when callers ask
+# what their current delivery status means.
+STATUS_EXPLANATIONS: dict[str, str] = {
+    "in_transit": "In transit means your parcel is moving through the delivery network.",
+    "out_for_delivery": "Out for delivery means the courier is expected to deliver your parcel today.",
+    "failed_attempt": "A failed attempt means the courier tried to deliver your parcel but could not complete the delivery.",
+    "delivered": "Delivered means the courier marked your parcel as delivered.",
+    "cancelled": "Cancelled means the delivery has been cancelled.",
+    "returned_to_sender": "Returned to sender means the parcel is on its way back to the sender.",
 }
 
 # ── State-aware intent priority ───────────────────────────────────────

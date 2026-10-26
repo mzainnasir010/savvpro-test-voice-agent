@@ -15,7 +15,7 @@
    → update docs → move on.
 4. **Determinism.** Inject `clock: datetime` (not `date`) everywhere.  Never call
    `datetime.now()` or `date.today()` in app or test code.  Fixture
-   `frozen_clock` = `datetime(2026, 10, 26, 14, 30, tzinfo=timezone.utc)`.
+   `frozen_clock` = `datetime(2026, 10, 26, 14, 30, tzinfo=timezone(timedelta(hours=5), name="PKT"))`.
 5. **Threading, not asyncio.** Repository and session store use `threading.Lock`.
 6. **Two-pass normaliser.** `intent_text` preserves number words; `digit_text`
    converts them.  `"like"` is NOT a filler word.
@@ -26,8 +26,10 @@
 11. **Rebook is atomic** (release old + book new in one lock).  Cancel releases slot.
 12. **Empty text = silence**, never a 400 error.
 13. **Separate counters** for silence and unknown intent.
-14. **DELIVER_STATUS → CHOOSE_ACTION**, not END.
+14. **Completed actions and status reads ask before ending.** `yes` returns to
+    the action menu; `no` ends the call.
 15. **TTS-friendly replies** — IDs read digit by digit, sentences ≤ 20 words.
+16. **Backend owns application logic.** The frontend calls backend APIs and does not duplicate data, service, or dialogue decisions.
 
 ---
 
@@ -124,7 +126,7 @@
 | File | Purpose |
 |------|---------|
 | `app/models/api.py` | Request and response schemas for session creation, turns, and history |
-| `app/api/dependencies.py` | Lazy in-memory services and injectable UTC clock |
+| `app/api/dependencies.py` | Lazy in-memory services and injectable Pakistan local clock |
 | `app/api/routes/sessions.py` | Create session, process turns, read history, and end session endpoints |
 | `app/main.py` | Registers the sessions router |
 | `app/data/repository.py` | Session deletion marks the session ended and moves it to `END` |
@@ -165,8 +167,103 @@ Postman collection JSON validation passed. Full backend suite: `488 passed, 2 wa
 
 ## Build status
 
-Steps 1–12 are complete. The backend suite passes, lint is clean, and total
-application coverage meets the 90% target.
+Backend Steps 1–12 are complete. Frontend Steps 13–15 are implemented; frontend
+lint and production build pass. Backend code was not changed for Step 14.
+
+The backend also handles questions asking what the current parcel status means;
+for example, “what does failed attempt mean” returns a plain-language explanation
+and the actions available for that parcel. Phone verification accepts spaced
+spoken digits and digits that overlap with the tracking ID when provided on a
+later turn. The full backend suite has not been rerun after these follow-up fixes.
+
+Unknown-intent handling now allows five unclear turns with clarification prompts,
+then asks whether the caller wants a human agent. The call transfers only after
+the caller confirms; declining preserves the current dialogue state. A direct
+request for a human agent still transfers immediately.
+
+Pakistan localization now covers fictional pickup points in Islamabad, Lahore,
+Karachi, Peshawar, and Rawalpindi; Pakistani sample recipient names; UTC+05:00
+PKT runtime scheduling; and `en-PK` speech recognition with local-time transcript
+timestamps. Fixture clocks and location-related test expectations were updated.
+
+Pickup selection also accepts a point number, city, or configured area alias;
+callers can change from pickup to rescheduling, cancellation, or status while
+choosing or confirming a point. Pickup options are Markdown bullets with bold
+names in the frontend. Backend lint and frontend lint/build pass; the backend
+test suite has not been rerun after these follow-up changes.
+
+Completed bookings, pickup confirmations, cancellations, and status reads now
+ask whether the caller wants anything else. The assistant ends only after the
+caller says no (or explicitly says goodbye). Reschedule intent matching also
+includes the STT variants “reach casual late” and “reset your late”.
+
+### Step 13 — React caller frontend ✅
+
+**Implemented so far:**
+
+- Replaced the default Vite starter screen with a responsive REDELIVER call console.
+- Added transcript composer, session controls, assistant transcript, and backend decision-trace display.
+- Added optional browser-native speech recognition and speech synthesis, with typed input fallback.
+- Centralized HTTP calls in `frontend/src/services/redeliverApi.js`; Vite proxies `/api` to the backend in local development.
+- Rewrote the root and frontend setup guides and aligned the plan/design/backend docs with the backend-only service boundary.
+- `npm run lint` and `npm run build` from `frontend/` both pass.
+
+**Validation note:** the browser preview could not reach the local Vite server in this
+restricted environment (local socket access was denied). Start the app locally to
+review it visually using the commands in `README.md`.
+
+### Step 14 — Product website, WebGL voice hero, and dashboard ✅
+
+**Implemented:**
+
+- Expanded the caller console into a responsive landing page with navigation,
+  workflow, supported capabilities, use cases, product limits, and a final CTA.
+- Added a custom WebGL ray-marched 3D hero visual. Web Audio microphone
+  amplitude drives the listening state; browser speech synthesis uses an
+  explicit speaking-state animation because its playback stream is not exposed.
+- Connected the visual to idle, listening, processing, speaking, and
+  disconnected states, with microphone denial messaging, stop-speaking control,
+  CSS fallback without WebGL, reduced-motion behavior, and cleanup for audio
+  tracks, contexts, animation frames, and WebGL resources.
+- Added light/dark themes, responsive mobile navigation, and an operations
+  dashboard with overview, current-session transcript, fixed-agent information,
+  and local display/voice preferences.
+- Preserved backend-owned business decisions and transcript formatting. Added
+  `GET /sessions/{id}` to the existing frontend API wrapper for refreshing the
+  current session.
+
+**Data mapping and unavailable features:**
+
+- `GET /health` powers API connectivity status and retry.
+- `POST /sessions`, `POST /sessions/{id}/turns`, `GET /sessions/{id}`, and
+  `DELETE /sessions/{id}` power the live call, trace, current transcript, and
+  session ending.
+- The backend has no APIs for aggregate or historical analytics, call duration,
+  latency, agent configuration, teams, billing, or integration management.
+  The interface labels or omits those features and displays no fabricated
+  operational metrics.
+
+**Validation:** `npm run lint` and `npm run build` both pass. The browser tool
+could not connect to the locally started Vite server because this environment
+denies local socket access, so manual visual inspection remains for a local
+browser. Backend files were not modified.
+
+### Step 15 — Balanced landing layout, scroll motion, and dedicated call page ✅
+
+- Centered the hero within a wider max-width container with matching horizontal
+  padding, reducing the oversized left inset while preserving symmetric sides.
+- Added intersection-triggered reveals and staggered workflow/capability/use-case
+  motion. Reduced-motion preference reveals content immediately without scroll
+  animation.
+- Moved the transcript, microphone, typed input, spoken reply, replay, and end-call
+  controls to a dedicated `#voice` page; the marketing page retains the 3D
+  visual and links to the separate call experience. Browser back navigation and
+  direct reload of the voice hash are supported.
+- Kept the existing dashboard and backend session integration intact.
+
+**Validation:** frontend `npm run lint` and `npm run build` pass. Browser preview
+remains inaccessible in this environment because local socket access is denied.
+No backend files were changed.
 
 ---
 
@@ -211,7 +308,7 @@ application coverage meets the 90% target.
 
 | File | Purpose |
 |------|---------|
-| `app/models/session.py` | Expanded: `DialogueState` enum (13 states), `SlotMap` (tracking_id, ambiguous_ids, phone_last4, intended_date/period, confirmed_slot_id, pickup_point_id, action_intent, cancel_confirmed, verified), `DecisionTrace` (debugging breadcrumbs), `Turn` (role, text, trace), `Session` (state, slots, history, counters for silence/unknown/tracking/phone) |
+| `app/models/session.py` | Expanded: `DialogueState` enum (14 states), `SlotMap` (tracking_id, ambiguous_ids, phone_last4, intended_date/period, confirmed_slot_id, pickup_point_id, action_intent, cancel_confirmed, verified), `DecisionTrace` (debugging breadcrumbs), `Turn` (role, text, trace), `Session` (state, slots, history, counters for silence/unknown/tracking/phone) |
 | `app/brain/slot_filler.py` | `fill_from_turn(slot_map, norm, clock, state)` — extracts all slots from a single turn (tracking IDs, phone last 4, date/period). State-gated: only extracts what's relevant. Handles ambiguous IDs (2+), phone exclusion of tracking digits, date rejections. `reset_date_slots()`, `reset_action_slots()`, `missing_required_slots()` |
 | `app/brain/state_machine.py` | `StateMachine.process(session, text, clock, silence, stt_confidence)` → `TurnResult`. 13 state handlers, cross-cutting rules (silence escalation, repeat, human_agent, goodbye, unknown escalation, low STT), service integration. No AI, no LLM, clock injected |
 | `app/data/interfaces.py` | Added `rebook_slot` abstract method to `IParcelRepository` |

@@ -1,6 +1,6 @@
-# REDELIVER — Backend Implementation Plan
+# REDELIVER — Implementation Plan
 
-> **Status:** APPROVED — implementation in progress.
+> **Status:** Backend Steps 1–12 and Frontend Steps 13–15 implemented; see `docs/PROGRESS.md` for validation details.
 > **Last updated:** 2026-10-26
 
 ---
@@ -97,7 +97,11 @@ backend/
 └── requirements.txt
 ```
 
-> **What is NOT in scope for this phase:** `frontend/`, voice STT/TTS, any LLM/AI SDK.
+> **Original backend phase scope:** the backend plan intentionally excluded
+> `frontend/` and speech integration. Frontend work is now specified in Step 13.
+> It must call the backend API for all application behavior. Browser-native
+> speech recognition/synthesis can handle microphone and playback only; no LLM
+> or external speech service is added to the decision path.
 
 ---
 
@@ -165,7 +169,7 @@ backend/
   `cancelled`, `returned_to_sender`.
 - `DeliverySlot`: `slot_id`, `date` (date), `period` (`morning`/`afternoon`/`evening`),
   `capacity` (int), `booked` (int).
-- `PickupPoint`: `point_id`, `name`, `address`, `open_days` (list[str]), `open_hours` (str).
+- `PickupPoint`: `point_id`, `name`, `address`, `selection_aliases`, `open_days` (list[str]), `open_hours` (str).
 - `Parcel`: `tracking_id`, `phone_last4`, `status`, `recipient_name` (log only — never
   returned to caller before verification), `current_slot_id` (str | None),
   `phone_failures` (int, default 0), `locked` (bool, default False).
@@ -312,6 +316,7 @@ normalize(raw_text: str) -> NormalizeResult
 | `pickup_point` | "pickup", "pick up", "collect", "collection point", "depot", "drop-off" |
 | `cancel` | "cancel", "don't want it", "send it back", "return it", "refuse delivery" |
 | `status` | "where is", "status", "tracking update", "where's my parcel", "any update" |
+| `explain_status` | "what does failed attempt mean", "what is failed attempt", "what does this status mean" |
 | `affirm` | "yes", "yeah", "correct", "that's right", "go ahead", "confirm", "sure" |
 | `deny` | "no", "nope", "wrong", "not right", "that's wrong", "never mind" |
 | `repeat` | "repeat", "say again", "what did you say", "pardon", "come again" |
@@ -353,9 +358,8 @@ score(intent, text):
 - All transitions are explicit `if/elif` chains; no dynamic dispatch.
 - Normalises input → runs slot filler → runs intent detector (with state context) → applies
   transition rules → calls service functions → builds and returns trace.
-- **DELIVER_STATUS** does not terminate; after reading status it transitions to
-  `CHOOSE_ACTION` with "Is there anything else I can help you with?" so the caller can
-  also reschedule or cancel after checking status.
+- After a completed action or status read, enter `ANYTHING_ELSE` and ask whether
+  the caller wants to continue. `yes` returns to the action menu; `no` ends the call.
 - **TTS-friendly replies:** IDs are read digit by digit; sentences are ≤ 20 words.
   The `MESSAGES` dict in `constants.py` enforces this.
 
@@ -420,6 +424,7 @@ COLLECT_PICKUP_POINT       (pickup_point flow)
 CONFIRM_PICKUP             (echo pickup point and ask to confirm)
 CONFIRM_CANCEL             (ask "are you sure you want to cancel?")
 DELIVER_STATUS             (read parcel status → return to CHOOSE_ACTION)
+ANYTHING_ELSE              (ask whether caller wants another action; yes → menu, no → END)
 END
 ```
 
@@ -459,17 +464,20 @@ COLLECT_PERIOD          | period recognised AND slot available                  
                         | period recognised AND slot NOT available                     | COLLECT_PERIOD          | "No [period] slot that day. Available: [list]. Which do you prefer?"
                         | new date extracted (change of mind on date)                 | COLLECT_DATE            | Reset period, re-ask date
                         | change_of_mind intent                                        | CHOOSE_ACTION           | Reset all date slots, return to menu
-CONFIRM_SLOT            | affirm                                                       | END                     | book_slot or rebook_slot; "Booked. Delivery on [date] [period]. Goodbye."
+CONFIRM_SLOT            | affirm                                                       | ANYTHING_ELSE           | book_slot or rebook_slot; report result and ask whether caller wants anything else
                         | deny                                                         | COLLECT_DATE            | "OK. What date would you like instead?"
                         | new date or period extracted                                 | COLLECT_DATE/PERIOD     | Reset and re-collect
-COLLECT_PICKUP_POINT    | valid point selected (by name or number from list)           | CONFIRM_PICKUP          | "You chose [name] at [address]. Is that right?"
+COLLECT_PICKUP_POINT    | valid point selected (by number, name, city, or area alias)  | CONFIRM_PICKUP          | Confirm point, address, and PKT hours; allow action changes
                         | no valid selection, attempts within limit                    | COLLECT_PICKUP_POINT    | List points again with ordinal labels
                         | change_of_mind                                               | CHOOSE_ACTION           | Return to menu
-CONFIRM_PICKUP          | affirm                                                       | END                     | "Noted. Collect from [name]. Goodbye."
+CONFIRM_PICKUP          | affirm                                                       | ANYTHING_ELSE           | Confirm pickup point and ask whether caller wants anything else
                         | deny                                                         | COLLECT_PICKUP_POINT    | "Which point would you prefer?"
-CONFIRM_CANCEL          | affirm                                                       | END                     | cancel_parcel (releases slot); "Your parcel is cancelled. Goodbye."
+CONFIRM_CANCEL          | affirm                                                       | ANYTHING_ELSE           | cancel_parcel (releases slot); report cancellation and ask whether caller wants anything else
                         | deny                                                         | CHOOSE_ACTION           | "OK, not cancelled. What else can I help with?"
-DELIVER_STATUS          | (auto on entry)                                              | CHOOSE_ACTION           | Read status; "Is there anything else I can help you with?"
+DELIVER_STATUS          | (auto on entry)                                              | ANYTHING_ELSE           | Read status and ask whether caller wants anything else
+ANYTHING_ELSE           | affirm                                                       | CHOOSE_ACTION           | Offer the action menu
+                        | deny                                                         | END                     | Say goodbye and end the call
+                        | a recognized action                                          | CHOOSE_ACTION / action  | Continue with the requested help
 END                     | any input                                                    | END                     | "This call has ended. Goodbye."
 ```
 
@@ -482,7 +490,7 @@ END                     | any input                                             
 | `repeat` intent | — | Re-emit last assistant reply; state unchanged |
 | `human_agent` intent | — | Handoff message; END |
 | `goodbye` intent | — | Farewell; END |
-| `unknown` for consecutive turns | unknown_count == MAX_UNKNOWN_TURNS | Offer human agent; END |
+| `unknown` for consecutive turns | unknown_count == MAX_UNKNOWN_TURNS | Ask whether the caller wants a human agent; transfer only after `affirm`, otherwise resume the current state |
 
 **Separate counters:** `silence_count` and `unknown_count` are tracked independently.
 A silence turn does not increment `unknown_count` and vice versa.
@@ -583,6 +591,7 @@ Disambiguation rules applied to text BEFORE scoring:
 | `pickup_point` | "pickup point", "pick up point", "collection point", "pick it up", "collect it", "go to depot", "post office" | "collect", "depot", "branch" | `r"pick\s*up\s*point"`, `r"collect\s*(it|from)"` |
 | `cancel` | "cancel the delivery", "cancel my delivery", "don't want it", "send it back", "return it", "refuse delivery" | "cancel", "stop delivery" | `r"cancel\s*(the\s*)?(delivery|order|parcel)"`, `r"don'?t\s+want"` |
 | `status` | "where is my parcel", "where's my parcel", "tracking update", "any update on my delivery", "has it been delivered" | "status", "tracking", "where is it" | `r"where\s+(is|are)\s+(my|the)"`, `r"(what|how).*(status|update)"` |
+| `explain_status` | "what does failed attempt mean", "what does fail attempt mean", "what is failed attempt", "explain failed attempt" | — | Status meaning question patterns; response uses the parcel's current status and available actions |
 | `affirm` | "yes please", "yes confirm", "that's right", "go ahead", "that is correct", "confirm please" | "yes", "yeah", "yep", "correct", "ok", "sure", "alright", "perfect" | `r"\byes\b"`, `r"\byeah\b"` |
 | `deny` | "no that's wrong", "that is not right", "cancel that", "never mind that" | "no", "nope", "wrong", "never mind", "incorrect" | `r"^no\b"`, `r"that'?s\s+(not\s+right|wrong)"` |
 | `repeat` | "say that again", "repeat that please", "what did you say", "come again please" | "pardon", "repeat", "say again", "didn't catch" | `r"(say|repeat)\s+(that\s+)?(again|please)"` |
@@ -632,7 +641,7 @@ Each parcel:
 {
   "tracking_id": "RD12345678",
   "phone_last4": "1234",
-  "recipient_name": "Alex Johnson",
+  "recipient_name": "Ayesha Khan",
   "status": "failed_attempt",
   "current_slot_id": null
 }
@@ -674,8 +683,8 @@ edge cases deterministic.
 [
   {
     "point_id": "PP-001",
-    "name": "Westside Depot",
-    "address": "12 Commerce Road, Westville",
+    "name": "Islamabad I-8 Markaz Depot",
+    "address": "Shop 12, I-8 Markaz, Islamabad, Islamabad Capital Territory",
     "open_days": ["monday","tuesday","wednesday","thursday","friday"],
     "open_hours": "08:00-18:00"
   }
@@ -804,7 +813,7 @@ One point weekdays-only, one 7-days-a-week, to test `open_on` filtering.
 | 7 | Requested slot is full | `get_available_slots` returns empty list for chosen date+period | Offer nearest 2–3 alternatives |
 | 8 | Date in past / beyond 7 days / past cutoff today | `parse_date_and_period` returns rejection reason | Tailored message per reason ("past", "out_of_range", "cutoff") |
 | 9 | Multi-slot turn ("reschedule RD12345678 to tomorrow morning") | `fill_from_turn` extracts all in one pass | Fill all extracted slots; skip already-answered questions |
-| 10 | Nothing useful / mumble / off-topic | Intent = `unknown`, confidence < threshold | Escalating: gentle (1) → clearer (2) → human offer (3) |
+| 10 | Nothing useful / mumble / off-topic | Intent = `unknown`, confidence < threshold | Escalating clarification over 5 turns; then ask permission to transfer; only transfer after caller says yes |
 | 11 | Silence or empty input | `silence=True` or `text==""` | Gentle prompt (1), soft (2), polite end (3); silence_count++ |
 | 12 | Repeat / human / goodbye at any state | Cross-cutting intent rules | `repeat` → re-emit last reply; `human_agent` → handoff + END; `goodbye` → farewell + END |
 | 13 | Cancellation without confirmation | Always routes through CONFIRM_CANCEL | Cancel only fires on `affirm`; `deny` → CHOOSE_ACTION |
@@ -901,7 +910,7 @@ One point weekdays-only, one 7-days-a-week, to test `open_on` filtering.
 | `test_edge_cases.py` | All 18 edge cases |
 
 ### 9.5 Determinism
-- `conftest.py` defines `frozen_clock` fixture: `datetime(2026, 10, 26, 14, 30, tzinfo=timezone.utc)`.
+- `conftest.py` defines `frozen_clock` fixture at 14:30 PKT (`timezone(timedelta(hours=5), name="PKT")`).
 - Repository reset to clean snapshot before each test via `autouse` fixture.
 - No test reads `datetime.now()` or `date.today()`.
 
@@ -974,6 +983,28 @@ One point weekdays-only, one 7-days-a-week, to test `open_on` filtering.
 - `pytest --cov=app --cov-report=term-missing` — fix gaps below 90%.
 - Final `README.md`, `DESIGN.md`, `AI_USAGE.md`, `docs/BACKEND_GUIDE.md`.
 
+### Step 13 — React caller frontend
+- Replace the starter page with the REDELIVER caller interface and responsive layouts.
+- Keep every HTTP request in `frontend/src/services/redeliverApi.js` and call the backend session/health endpoints.
+- Keep intent, parcel, verification, booking, cancellation, and state-transition logic in the backend.
+- Add transcript entry, backend decision-trace display, session start/end, and clear loading/error states.
+- Provide browser-native speech recognition and speech synthesis where supported; retain typed input as fallback.
+- Configure the Vite `/api` proxy for local development and `VITE_API_BASE_URL` for deployments.
+- Update the user, backend, and frontend documentation, then run frontend lint/build checks.
+
+### Step 14 — Complete product site and operations dashboard
+- Expand the caller console into a responsive product site with workflow, capabilities, use cases, and prototype limitations.
+- Build a custom WebGL 3D hero visualizer; connect microphone amplitude through Web Audio when listening and use honest state animation for browser speech synthesis.
+- Add dashboard overview, active-session transcript, fixed-agent information, local preferences, and light/dark themes.
+- Map only existing health and session endpoints to UI; label historical analytics and agent management unavailable because no supporting backend APIs exist.
+- Preserve the caller voice/session flow and backend-only business logic; update frontend docs and run lint/build checks.
+
+### Step 15 — Landing-page balance, scroll reveals, and dedicated call page
+- Balance the landing hero's left/right content margins across viewport sizes.
+- Add viewport-triggered section reveals and staggered content motion, respecting reduced-motion preferences.
+- Move live call transcript and microphone/speech controls to a dedicated voice page with its own URL hash route and browser back navigation.
+- Keep the hero visualizer and voice-demo entry points on the marketing page; verify frontend lint/build and leave backend files unchanged.
+
 ---
 
 ## Appendix A — `.env.example` variables
@@ -998,7 +1029,7 @@ MAX_PHONE_ATTEMPTS=3
 MAX_SILENCE_TURNS=3
 
 # Max consecutive unknown-intent turns before offering human
-MAX_UNKNOWN_TURNS=3
+MAX_UNKNOWN_TURNS=5
 
 # Application environment: development, production
 APP_ENV=development

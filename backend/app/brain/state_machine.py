@@ -12,11 +12,13 @@ Flow:
 
 from __future__ import annotations
 
+import re
 from datetime import datetime
 
 from app.brain.constants import (
     MESSAGES,
     PARCEL_STATUS_RULES,
+    STATUS_EXPLANATIONS,
     STT_CONFIDENCE_THRESHOLD,
 )
 from app.brain.intent_detector import detect_intent
@@ -51,6 +53,52 @@ def _format_date(d) -> str:
     return d.strftime("%A %B %d").replace(" 0", " ")
 
 
+def _format_pickup_points(points) -> str:
+    """Format localized pickup locations with Pakistan-local opening hours."""
+    return "\n".join(
+        f"- **{point.name}** — {point.address}. "
+        f"Open {point.open_hours.replace('-', ' to ')} PKT."
+        for i, point in enumerate(points)
+    )
+
+
+def _resolve_pickup_selection(text: str, points) -> list:
+    """Find pickup points named by number, full name, city, or area alias."""
+    user_text = text.casefold().strip()
+    ordinal_values = {
+        "1": 1, "one": 1, "first": 1,
+        "2": 2, "two": 2, "second": 2,
+        "3": 3, "three": 3, "third": 3,
+        "4": 4, "four": 4, "fourth": 4,
+        "5": 5, "five": 5, "fifth": 5,
+    }
+    is_last = bool(re.search(r"\b(?:last|final)\s+(?:one|point|option)\b", user_text))
+    number_match = re.search(
+        r"\b(?:(?:point|option|number|choose|select|take|pick)\s+)?"
+        r"(1|2|3|4|5|one|two|three|four|five|first|second|third|fourth|fifth)\b",
+        user_text,
+    )
+    ordinal = ordinal_values.get(number_match.group(1)) if number_match else None
+    if is_last:
+        ordinal = len(points)
+    if ordinal is None:
+        ordinal = ordinal_values.get(user_text)
+    if ordinal is not None and ordinal <= len(points):
+        return [points[ordinal - 1]]
+
+    matched: dict[str, object] = {}
+    for point in points:
+        aliases = [point.name, *point.selection_aliases]
+        for alias in aliases:
+            pattern = r"(?<!\w)" + r"\s+".join(
+                re.escape(part) for part in alias.casefold().split()
+            ) + r"(?!\w)"
+            if re.search(pattern, user_text):
+                matched[point.point_id] = point
+                break
+    return list(matched.values())
+
+
 # ── TurnResult ────────────────────────────────────────────────────────
 
 
@@ -82,7 +130,7 @@ class StateMachine:
         max_tracking_attempts: int = 3,
         max_phone_attempts: int = 3,
         max_silence_turns: int = 3,
-        max_unknown_turns: int = 3,
+        max_unknown_turns: int = 5,
     ) -> None:
         self._repo = repo
         self._max_tracking = max_tracking_attempts
@@ -165,6 +213,29 @@ class StateMachine:
         trace.runner_up_confidence = intent_result.runner_up_confidence
         intent = intent_result.intent
 
+        # Escalation is opt-in. Keep the current dialogue state, and only
+        # transfer after an affirmative answer to the explicit offer.
+        if session.handoff_confirmation_pending:
+            if intent == "affirm":
+                session.handoff_confirmation_pending = False
+                session.state = DialogueState.END
+                session.ended = True
+                trace.state_after = DialogueState.END.value
+                return self._finish(
+                    session, MESSAGES["human_handoff"], trace, ended=True
+                )
+            if intent == "deny":
+                session.handoff_confirmation_pending = False
+                session.unknown_count = 0
+                trace.state_after = session.state.value
+                return self._finish(
+                    session, MESSAGES["human_declined"], trace
+                )
+            # A new request or a direct request for an agent supersedes the
+            # pending confirmation; process it normally below.
+            session.handoff_confirmation_pending = False
+            session.unknown_count = 0
+
         # ── Cross-cutting: repeat ─────────────────────────────────────
         if intent == "repeat":
             reply = session.last_assistant_reply or MESSAGES["repeat_no_previous"]
@@ -231,16 +302,19 @@ class StateMachine:
             return self._on_confirm_slot(session, intent, clock, trace)
 
         elif state == DialogueState.COLLECT_PICKUP_POINT:
-            return self._on_collect_pickup_point(session, intent, trace)
+            return self._on_collect_pickup_point(session, intent, clock, trace)
 
         elif state == DialogueState.CONFIRM_PICKUP:
-            return self._on_confirm_pickup(session, intent, trace)
+            return self._on_confirm_pickup(session, intent, clock, trace)
 
         elif state == DialogueState.CONFIRM_CANCEL:
             return self._on_confirm_cancel(session, intent, trace)
 
         elif state == DialogueState.DELIVER_STATUS:
             return self._on_deliver_status(session, trace)
+
+        elif state == DialogueState.ANYTHING_ELSE:
+            return self._on_anything_else(session, intent, clock, trace)
 
         # Fallback (should not reach here).
         return self._handle_unknown(session, trace)
@@ -367,6 +441,41 @@ class StateMachine:
 
         allowed = PARCEL_STATUS_RULES.get(parcel.status.value, set())
 
+        if intent == "explain_status":
+            session.unknown_count = 0
+            explanation = STATUS_EXPLANATIONS.get(
+                parcel.status.value,
+                "I do not have an explanation for that parcel status.",
+            )
+            action_labels = {
+                "reschedule": "reschedule",
+                "pickup_point": "pick up from a point",
+                "cancel": "cancel",
+                "status": "check status",
+            }
+            available = [
+                action_labels[action]
+                for action in ("reschedule", "pickup_point", "cancel", "status")
+                if action in allowed
+            ]
+            if not available:
+                return (
+                    f"{explanation} Please contact support for help with next steps."
+                )
+            if len(available) == 1:
+                actions_text = f"You can {available[0]}."
+            elif len(available) == 2:
+                actions_text = f"You can {available[0]} or {available[1]}."
+            else:
+                actions_text = (
+                    "You can " + ", ".join(available[:-1])
+                    + f", or {available[-1]}."
+                )
+            return MESSAGES["status_explanation"].format(
+                explanation=explanation,
+                available_actions=actions_text,
+            )
+
         if intent == "reschedule":
             if "reschedule" in allowed:
                 slots.action_intent = "reschedule"
@@ -385,10 +494,7 @@ class StateMachine:
                 session.state = DialogueState.COLLECT_PICKUP_POINT
                 session.unknown_count = 0
                 points = list_pickup_points(self._repo)
-                points_list = "; ".join(
-                    f"{i+1}. {p.name} at {p.address}"
-                    for i, p in enumerate(points)
-                )
+                points_list = _format_pickup_points(points)
                 return MESSAGES["list_pickup_points"].format(
                     points_list=points_list
                 )
@@ -594,12 +700,12 @@ class StateMachine:
                     self._repo, slots.confirmed_slot_id, slots.tracking_id,
                 )
             if success:
-                session.state = DialogueState.END
-                session.ended = True
+                session.state = DialogueState.ANYTHING_ELSE
                 msg_key = "rebooked" if (parcel and parcel.current_slot_id) else "booked"
                 return MESSAGES[msg_key].format(
                     date=_format_date(slots.intended_date),
                     period=slots.intended_period,
+                    anything_else=MESSAGES["anything_else"],
                 )
             else:
                 # Slot became full between confirm and book.
@@ -643,7 +749,7 @@ class StateMachine:
     # ── COLLECT_PICKUP_POINT ──────────────────────────────────────────
 
     def _on_collect_pickup_point(
-        self, session: Session, intent: str, trace: DecisionTrace
+        self, session: Session, intent: str, clock: datetime, trace: DecisionTrace
     ) -> str:
         slots = session.slots
 
@@ -652,57 +758,61 @@ class StateMachine:
             session.state = DialogueState.CHOOSE_ACTION
             return MESSAGES["change_of_mind_menu"]
 
-        points = list_pickup_points(self._repo)
+        if intent in {"reschedule", "cancel", "status"}:
+            reset_action_slots(slots)
+            session.state = DialogueState.CHOOSE_ACTION
+            return self._on_choose_action(session, intent, clock, trace)
 
-        # Try to match by ordinal number (1, 2, 3...).
-        trace.slots_extracted.get("phone_last4", "")
-        # Also check the raw intent text for a number.
-        for i, p in enumerate(points):
-            name_lower = p.name.lower()
-            # Check if user said the point name.
-            if name_lower in (session.history[-1].text.lower() if session.history else ""):
-                slots.pickup_point_id = p.point_id
-                session.state = DialogueState.CONFIRM_PICKUP
-                return MESSAGES["confirm_pickup"].format(
-                    name=p.name, address=p.address,
-                )
-            # Check if user said the ordinal number.
-            user_text = session.history[-1].text.lower() if session.history else ""
-            ordinal = str(i + 1)
-            if ordinal in user_text:
-                slots.pickup_point_id = p.point_id
-                session.state = DialogueState.CONFIRM_PICKUP
-                return MESSAGES["confirm_pickup"].format(
-                    name=p.name, address=p.address,
-                )
+        points = list_pickup_points(self._repo)
+        user_text = next(
+            (turn.text for turn in reversed(session.history) if turn.role == "user"),
+            "",
+        )
+        matches = _resolve_pickup_selection(user_text, points)
+
+        if len(matches) == 1:
+            point = matches[0]
+            slots.pickup_point_id = point.point_id
+            session.state = DialogueState.CONFIRM_PICKUP
+            return MESSAGES["confirm_pickup"].format(
+                name=point.name,
+                address=point.address,
+                open_hours=point.open_hours.replace("-", " to "),
+            )
+
+        if len(matches) > 1:
+            return MESSAGES["pickup_point_ambiguous"]
 
         # No valid selection.
-        points_list = "; ".join(
-            f"{i+1}. {p.name} at {p.address}" for i, p in enumerate(points)
-        )
+        points_list = _format_pickup_points(points)
         return MESSAGES["list_pickup_points"].format(points_list=points_list)
 
     # ── CONFIRM_PICKUP ────────────────────────────────────────────────
 
     def _on_confirm_pickup(
-        self, session: Session, intent: str, trace: DecisionTrace
+        self, session: Session, intent: str, clock: datetime, trace: DecisionTrace
     ) -> str:
         slots = session.slots
 
+        if intent in {"reschedule", "pickup_point", "cancel", "status"}:
+            reset_action_slots(slots)
+            session.state = DialogueState.CHOOSE_ACTION
+            return self._on_choose_action(session, intent, clock, trace)
+
         if intent == "affirm":
             point = self._repo.get_pickup_point(slots.pickup_point_id)
-            session.state = DialogueState.END
-            session.ended = True
+            session.state = DialogueState.ANYTHING_ELSE
             name = point.name if point else "the pickup point"
-            return MESSAGES["pickup_done"].format(name=name)
+            return MESSAGES["pickup_done"].format(
+                name=name,
+                anything_else=MESSAGES["anything_else"],
+            )
 
         if intent == "deny":
             slots.pickup_point_id = None
             session.state = DialogueState.COLLECT_PICKUP_POINT
             points = list_pickup_points(self._repo)
-            points_list = "; ".join(
-                f"{i+1}. {p.name} at {p.address}" for i, p in enumerate(points)
-            )
+            points_list = _format_pickup_points(points)
             return MESSAGES["list_pickup_points"].format(points_list=points_list)
 
         if intent == "change_of_mind":
@@ -715,6 +825,7 @@ class StateMachine:
         if point:
             return MESSAGES["confirm_pickup"].format(
                 name=point.name, address=point.address,
+                open_hours=point.open_hours.replace("-", " to "),
             )
         return MESSAGES["ask_tracking_id"]
 
@@ -725,9 +836,10 @@ class StateMachine:
     ) -> str:
         if intent == "affirm":
             cancel_parcel(self._repo, session.slots.tracking_id)
-            session.state = DialogueState.END
-            session.ended = True
-            return MESSAGES["cancelled"]
+            session.state = DialogueState.ANYTHING_ELSE
+            return MESSAGES["cancelled"].format(
+                anything_else=MESSAGES["anything_else"],
+            )
 
         if intent == "deny":
             session.slots.cancel_confirmed = False
@@ -751,11 +863,52 @@ class StateMachine:
         status_text = (
             parcel.status.value.replace("_", " ") if parcel else "unknown"
         )
-        session.state = DialogueState.CHOOSE_ACTION
+        session.state = DialogueState.ANYTHING_ELSE
         return (
             f"Your parcel is currently {status_text}. "
             + MESSAGES["anything_else"]
         )
+
+    def _on_anything_else(
+        self,
+        session: Session,
+        intent: str,
+        clock: datetime,
+        trace: DecisionTrace,
+    ) -> str:
+        """Ask before ending after a completed action."""
+        if intent == "deny":
+            session.state = DialogueState.END
+            session.ended = True
+            return MESSAGES["goodbye"]
+
+        if intent == "affirm":
+            session.state = DialogueState.CHOOSE_ACTION
+            session.unknown_count = 0
+            return MESSAGES["anything_else_continue"]
+
+        user_text = session.history[-1].text.casefold() if session.history else ""
+        asks_pickup_timing = bool(re.search(
+            r"\b(when|what\s+date|which\s+date|what\s+day|how\s+soon)\b",
+            user_text,
+        ))
+        if intent == "pickup_point" and asks_pickup_timing and session.slots.pickup_point_id:
+            point = self._repo.get_pickup_point(session.slots.pickup_point_id)
+            if point:
+                days = ", ".join(day.title() for day in point.open_days)
+                hours = point.open_hours.replace("-", " to ")
+                return (
+                    f"You selected {point.name}. It is open {days}, {hours} PKT. "
+                    "I do not have a confirmed ready-for-collection date for this parcel. "
+                    + MESSAGES["anything_else"]
+                )
+
+        if intent in {"reschedule", "pickup_point", "cancel", "status", "explain_status"}:
+            session.state = DialogueState.CHOOSE_ACTION
+            session.unknown_count = 0
+            return self._on_choose_action(session, intent, clock, trace)
+
+        return MESSAGES["anything_else_clarify"]
 
     # ── Unknown handling ──────────────────────────────────────────────
 
@@ -764,11 +917,14 @@ class StateMachine:
     ) -> str:
         session.unknown_count += 1
         if session.unknown_count >= self._max_unknown:
-            session.state = DialogueState.END
-            session.ended = True
-            return MESSAGES["unknown_3"]
+            session.handoff_confirmation_pending = True
+            return MESSAGES["offer_human"]
         elif session.unknown_count == 2:
             return MESSAGES["unknown_2"]
+        elif session.unknown_count == 3:
+            return MESSAGES["unknown_3"]
+        elif session.unknown_count == 4:
+            return MESSAGES["unknown_4"]
         return MESSAGES["unknown_1"]
 
     # ── Finish helper ─────────────────────────────────────────────────

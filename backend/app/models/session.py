@@ -18,7 +18,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class DialogueState(str, enum.Enum):
-    """The 13 dialogue states."""
+    """The explicit dialogue states used by the assistant."""
 
     GREETING = "GREETING"
     COLLECT_TRACKING_ID = "COLLECT_TRACKING_ID"
@@ -32,6 +32,7 @@ class DialogueState(str, enum.Enum):
     CONFIRM_PICKUP = "CONFIRM_PICKUP"
     CONFIRM_CANCEL = "CONFIRM_CANCEL"
     DELIVER_STATUS = "DELIVER_STATUS"
+    ANYTHING_ELSE = "ANYTHING_ELSE"
     END = "END"
 
 
@@ -96,6 +97,7 @@ class Session(BaseModel):
     # Counters.
     silence_count: int = 0
     unknown_count: int = 0
+    handoff_confirmation_pending: bool = False
     tracking_attempts: int = 0
     phone_attempts: int = 0
 

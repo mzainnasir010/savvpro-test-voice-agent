@@ -2,21 +2,25 @@
 
 ## Tools used
 
-Antigravity and OpenAI Codex were used as coding assistants during this
-project. They helped with repository work, implementation and refinement of
-Python modules and tests, investigation of failures, and documentation. The
-project owner reviewed the generated code against the plan and ran the local
-pytest suite.
+Antigravity and OpenAI Codex were used as coding assistants during this project.
+They helped with implementation and refinement of the Python backend, API and
+workflow tests, the React caller interface, debugging, and project
+documentation. The project owner reviewed generated code against the plan and
+ran the local checks.
 
 No AI model is called by the running assistant to decide caller intent or
-dialogue actions. That behavior is implemented as deterministic Python rules.
+dialogue actions. Those decisions are deterministic Python rules in the
+backend. The frontend calls backend endpoints for application behavior; its
+optional speech controls use browser-native recognition and synthesis.
 
 ## Where assistance helped
 
-- Drafting and iterating on the backend implementation and API tests.
-- Checking the implementation against the documented state machine and edge
-  cases.
-- Updating setup, API, and design documentation.
+- Building and refining backend modules, API endpoints, and tests.
+- Checking the rule-based assistant against the documented state machine and
+  edge cases.
+- Replacing the starter frontend with a responsive call interface and
+  connecting it to the backend session API.
+- Updating setup, API, design, and frontend documentation.
 
 ## Corrections made during review
 
@@ -24,9 +28,13 @@ dialogue actions. That behavior is implemented as deterministic Python rules.
   existing repository test established that deletion should mark it ended and
   retain it for retrieval, so the implementation was aligned with that
   contract and the full suite was rerun.
-- The first API workflow test assumed the seeded next-day morning slot was
+- An initial API workflow assumed the seeded next-day morning slot was
   available. The fixture intentionally fills that slot, so the test was
   corrected to use an available afternoon slot.
+- The browser speech API may report a zero confidence value even when it has a
+  usable transcript. The frontend omits that unusable confidence value so the
+  backend can apply its default; actual low-confidence scores are still sent
+  for the backend to handle.
 
 ## Token counts and logs
 
@@ -54,10 +62,3 @@ rate-limit information, not an exact per-project token total
 Recorded per-session token usage is available in traces for Agents API
 sessions; that applies only if work ran through that API flow, not ordinary
 Codex app sessions ([OpenAI tracing guide](https://developers.openai.com/api/docs/guides/agents-api/tracing)).
-
-OpenAI’s Codex guide says `/status` shows context usage and available
-rate-limit information, not an exact per-project token total
-([Codex guide](https://developers.openai.com/blog/mastering-codex-remote-for-engineering)).
-For recorded
-per-session usage in an Agents API session, see the
-[OpenAI tracing guide](https://developers.openai.com/api/docs/guides/agents-api/tracing).

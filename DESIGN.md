@@ -9,14 +9,21 @@ call REDELIVER and:
 1. **Reschedule** the delivery to a new date and time window.
 2. **Redirect** the parcel to a nearby pickup point.
 3. **Cancel** the delivery entirely.
+
 4. **Check status** of the parcel.
 
-The assistant handles the entire conversation — from caller identification
-through to confirmation — without any human operator.
+The prototype is localized for Pakistan. Its fake pickup points use cities
+across Pakistan, runtime delivery dates and times use Pakistan Standard Time,
+and the browser speech controls request Pakistani English when available.
+Pickup addresses and recipients are fictional demo data.
 
-This repository implements the deterministic backend and text-transcript API.
-It does not include a phone connection, speech-to-text provider, text-to-speech
-provider, or browser frontend; those components can call the session API.
+The assistant handles the conversation — from caller identification through
+confirmation — and asks before suggesting a human-agent transfer.
+
+The repository includes the deterministic backend and a React product site,
+caller voice demo, and operations dashboard. The frontend uses browser-provided
+speech recognition and speech synthesis when available; there is no phone
+connection or external speech provider.
 
 ## The Brain: How Decisions Are Made
 
@@ -27,14 +34,15 @@ provider, or browser frontend; those components can call the session API.
 
 ```
 Caller speaks
-    → STT transcription
+    → Browser speech recognition (or typed transcript)
+    → React frontend sends transcript to the backend API
     → Two-pass normalizer (intent_text + digit_text)
     → Slot filler (extracts tracking ID, phone, date, period)
     → Intent detector (weighted keyword scoring, state-aware priority)
     → State machine (explicit if/elif transitions)
     → Service layer (verification, booking, pickup, cancellation)
-    → TTS-friendly reply
-    → Caller hears response
+    → Backend returns TTS-friendly reply and decision trace
+    → React displays reply and speaks it with browser speech synthesis
 ```
 
 ### Text Normalizer (Two-Pass)
@@ -70,7 +78,8 @@ and disambiguation rules handle ambiguous phrases ("no wait" →
 
 ### State Machine
 
-13 dialogue states with explicit transitions. Cross-cutting handlers for
+14 dialogue states with explicit transitions, including a follow-up state
+that asks before ending after a completed action. Cross-cutting handlers for
 silence, repeat requests, human agent handoff, and goodbye are checked
 before state-specific logic.
 
@@ -108,3 +117,31 @@ FastAPI exposes `GET /health` and the session lifecycle:
 Sessions and parcel mutations are held in memory. Restarting the backend
 clears them. See `docs/BACKEND_GUIDE.md` for setup, sample requests, and the
 full HTTP contract.
+
+### Frontend Boundary
+
+The React frontend in `frontend/` owns the marketing site, a dedicated `#voice`
+call page, and dashboard layout, transcript presentation, keyboard and
+microphone interaction, local theme/voice preferences, and displaying the
+backend decision trace. Its HTTP wrapper is
+`frontend/src/services/redeliverApi.js`.
+The frontend does not implement intent detection, verification, booking,
+parcel lookup, or session transitions. All such work is sent to the Python
+backend API. During local development Vite proxies `/api` to port 8000.
+
+Voice capture and spoken replies use browser-native Web Speech capabilities;
+the frontend sends recognized text to the backend and speaks only the reply
+returned by the backend. The hero's custom WebGL ray-marched 3D form reads
+microphone amplitude through Web Audio while listening. Browser speech
+synthesis does not expose its playback stream, so speaking uses a visibly
+state-driven animation instead of claiming audio analysis. Microphone tracks,
+audio contexts, animation frames, and WebGL resources are cleaned up. A CSS
+fallback appears without WebGL, and reduced-motion preference disables the
+continuous animation. Typed input remains the fallback for browsers without
+speech recognition.
+
+The dashboard maps the existing health endpoint and session lifecycle/history
+endpoints to live status, the active transcript, and current session state. The
+backend does not expose historical call lists, aggregate analytics, editable
+agent records, accounts, billing, or integration management; the frontend
+omits or labels those capabilities unavailable rather than fabricating data.

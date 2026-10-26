@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     max_tracking_attempts: int = 3
     max_phone_attempts: int = 3
     max_silence_turns: int = 3
-    max_unknown_turns: int = 3
+    max_unknown_turns: int = 5
 
     # --- Data ---
     data_dir: str = "data"

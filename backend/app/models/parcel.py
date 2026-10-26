@@ -83,6 +83,7 @@ class PickupPoint(BaseModel):
     point_id: str
     name: str
     address: str
+    selection_aliases: list[str] = Field(default_factory=list)
     open_days: list[str]
     open_hours: str
 

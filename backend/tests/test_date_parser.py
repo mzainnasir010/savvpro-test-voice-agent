@@ -1,6 +1,6 @@
 """Tests for the date and time-period parser.
 
-All tests inject ``clock = datetime(2026, 10, 26, 14, 30, tzinfo=UTC)``
+All tests inject ``clock = datetime(2026, 10, 26, 14, 30, tzinfo=timezone(timedelta(hours=5), name='PKT'))``
 (Monday, 2026-10-26, 2:30 PM).  The parser never reads the system clock.
 
 Covers:
@@ -16,7 +16,7 @@ Covers:
 
 from __future__ import annotations
 
-from datetime import UTC, date, datetime
+from datetime import date, datetime, timedelta, timezone
 
 import pytest
 
@@ -24,7 +24,7 @@ from app.brain.date_parser import ParseResult, parse_date_and_period
 
 # ── Fixtures ──────────────────────────────────────────────────────────
 
-CLOCK = datetime(2026, 10, 26, 14, 30, tzinfo=UTC)  # Monday
+CLOCK = datetime(2026, 10, 26, 14, 30, tzinfo=timezone(timedelta(hours=5), name="PKT"))  # Monday
 TODAY = CLOCK.date()  # 2026-10-26
 
 
@@ -239,7 +239,7 @@ class TestCutoff:
 
     def test_today_all_periods_past(self):
         """Late at night (22:00), all periods past → cutoff."""
-        late_clock = datetime(2026, 10, 26, 22, 0, tzinfo=UTC)
+        late_clock = datetime(2026, 10, 26, 22, 0, tzinfo=timezone(timedelta(hours=5), name="PKT"))
         r = parse_date_and_period("today", late_clock)
         assert r.reason == "cutoff"
 

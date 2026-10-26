@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import time
-from datetime import UTC, datetime
+from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 from pathlib import Path
 from typing import Annotated
@@ -13,6 +13,8 @@ from fastapi import Depends
 from app.core.config import Settings, get_settings
 from app.data.loader import load_parcels, load_pickup_points, load_slots
 from app.data.repository import InMemoryParcelRepository, InMemorySessionStore
+
+PAKISTAN_TIME = timezone(timedelta(hours=5), name="PKT")
 
 
 @lru_cache(maxsize=1)
@@ -48,8 +50,8 @@ def get_runtime_settings(settings: Annotated[Settings, Depends(get_settings)]) -
 
 
 def get_clock() -> datetime:
-    """Return an aware UTC timestamp; override this dependency in tests."""
-    return datetime.fromtimestamp(time.time(), tz=UTC)
+    """Return the current Pakistan local time; tests override this dependency."""
+    return datetime.fromtimestamp(time.time(), tz=PAKISTAN_TIME)
 
 
 def clear_service_caches() -> None:

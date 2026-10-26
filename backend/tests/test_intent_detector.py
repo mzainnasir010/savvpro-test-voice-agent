@@ -90,10 +90,9 @@ class TestWholeWord:
         r = detect_intent("has it been cancelled already")
         assert r.intent != "cancel" or r.confidence < 0.40
 
-    def test_rescheduled_not_reschedule(self):
-        """'rescheduled' should not trigger reschedule (no \b match)."""
-        r = detect_intent("it was rescheduled yesterday")
-        assert r.intent != "reschedule" or r.confidence < 0.40
+    def test_rescheduled_is_understood_as_reschedule_request(self):
+        for text in ("rescheduled", "I want to rescheduled", "free schedule", "residual"):
+            assert detect_intent(text, state="CHOOSE_ACTION").intent == "reschedule"
 
     def test_agent_in_reagent_not_matched(self):
         """'agent' in 'reagent' should not match due to \b."""

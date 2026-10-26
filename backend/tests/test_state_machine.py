@@ -5,7 +5,7 @@ Uses the real InMemoryParcelRepository and frozen clock.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -15,7 +15,7 @@ from app.data.loader import load_parcels, load_pickup_points, load_slots
 from app.data.repository import InMemoryParcelRepository
 from app.models.session import DialogueState, Session
 
-CLOCK = datetime(2026, 10, 26, 14, 30, tzinfo=UTC)
+CLOCK = datetime(2026, 10, 26, 14, 30, tzinfo=timezone(timedelta(hours=5), name="PKT"))
 DATA_DIR = Path(__file__).resolve().parents[1] / "data"
 
 
@@ -230,15 +230,16 @@ class TestChooseAction:
         # RD10000001 (in_transit) only allows "status" — perfect for this test.
         self._setup_verified(session, tracking_id="RD10000001")
         r = _process(sm, session, "status")
-        assert session.state == DialogueState.CHOOSE_ACTION  # returns to menu
+        assert session.state == DialogueState.ANYTHING_ELSE
         assert "anything else" in r.reply.lower()
 
-    def test_unknown_escalation(self, sm, session):
+    def test_unknown_escalation_asks_permission(self, sm, session):
         self._setup_verified(session)
-        session.unknown_count = 2
-        r = _process(sm, session, "blah blah blah")
-        assert session.state == DialogueState.END
-        assert r.ended is True
+        for _ in range(5):
+            r = _process(sm, session, "blah blah blah")
+        assert session.state == DialogueState.CHOOSE_ACTION
+        assert session.ended is False
+        assert "say yes or no" in r.reply.lower()
 
 
 # ── COLLECT_DATE ──────────────────────────────────────────────────────
@@ -295,8 +296,9 @@ class TestConfirmCancel:
     def test_affirm_cancels(self, sm, session, repo):
         self._setup(session)
         r = _process(sm, session, "yes")
-        assert session.state == DialogueState.END
+        assert session.state == DialogueState.ANYTHING_ELSE
         assert "cancelled" in r.reply.lower()
+        assert "say yes to continue" in r.reply.lower()
         p = repo.get_parcel("RD10000001")
         assert p.status.value == "cancelled"
 
@@ -322,8 +324,38 @@ class TestDeliverStatus:
         session.slots.tracking_id = "RD10000001"
         session.slots.verified = True
         r = _process(sm, session, "status")
-        assert session.state == DialogueState.CHOOSE_ACTION
+        assert session.state == DialogueState.ANYTHING_ELSE
         assert "anything else" in r.reply.lower()
+
+
+class TestPickupFollowUp:
+    def test_pickup_date_question_does_not_restart_point_selection(self, sm, session):
+        session.state = DialogueState.ANYTHING_ELSE
+        session.slots.pickup_point_id = "PP-001"
+        session.slots.verified = True
+        r = _process(sm, session, "yes can you tell me on which date I can check and collect it")
+        assert session.state == DialogueState.ANYTHING_ELSE
+        assert "do not have a confirmed ready-for-collection date" in r.reply.lower()
+        assert "pickup points:" not in r.reply.lower()
+
+    def test_pickup_selector_understands_last_and_fourth(self, sm, session):
+        session.state = DialogueState.COLLECT_PICKUP_POINT
+        session.slots.verified = True
+        for text, expected in (
+            ("last one", "Rawalpindi Saddar Mini Depot"),
+            ("fourth one", "Peshawar University Road Collection Point"),
+        ):
+            session.state = DialogueState.COLLECT_PICKUP_POINT
+            session.slots.pickup_point_id = None
+            r = _process(sm, session, text)
+            assert session.state == DialogueState.CONFIRM_PICKUP
+            assert expected.lower() in r.reply.lower()
+
+
+def test_all_from_my_side_is_goodbye():
+    from app.brain.intent_detector import detect_intent
+
+    assert detect_intent("India is all from my side").intent == "goodbye"
 
 
 # ── TurnResult and DecisionTrace ──────────────────────────────────────

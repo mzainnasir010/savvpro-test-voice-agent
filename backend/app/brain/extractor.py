@@ -64,7 +64,9 @@ def extract_tracking_ids(digit_text: str) -> list[str]:
 
 # ── Phone last-4 extraction ──────────────────────────────────────────
 
-_FOUR_DIGITS_RE = re.compile(r"\b(\d{4})\b")
+# Accept both typed digits (1234) and individually spoken digits normalized
+# with spaces (1 2 3 4). Do not match a four-digit substring of a longer run.
+_FOUR_DIGITS_RE = re.compile(r"(?<!\d)(\d(?:\s*\d){3})(?!\d)")
 
 
 def extract_phone_last4(
@@ -107,7 +109,7 @@ def extract_phone_last4(
         if overlaps:
             continue
 
-        digits = m.group(1)
+        digits = re.sub(r"\s+", "", m.group(1))
         # Skip if the digits are a substring of the excluded tracking ID digits.
         if digits in excluded_substrings:
             continue

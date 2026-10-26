@@ -7,7 +7,7 @@ Uses the real InMemoryParcelRepository and frozen clock.
 from __future__ import annotations
 
 import threading
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -17,7 +17,7 @@ from app.data.loader import load_parcels, load_pickup_points, load_slots
 from app.data.repository import InMemoryParcelRepository
 from app.models.session import DialogueState, Session
 
-CLOCK = datetime(2026, 10, 26, 14, 30, tzinfo=UTC)
+CLOCK = datetime(2026, 10, 26, 14, 30, tzinfo=timezone(timedelta(hours=5), name="PKT"))
 DATA_DIR = Path(__file__).resolve().parents[1] / "data"
 
 
@@ -238,10 +238,11 @@ class TestEdge10_Unknown:
         session.state = DialogueState.CHOOSE_ACTION
         session.slots.tracking_id = "RD30000001"
         session.slots.verified = True
-        for _ in range(3):
+        for _ in range(5):
             r = _p(sm, session, "random gibberish")
-        assert session.state == DialogueState.END
-        assert "transfer" in r.reply.lower() or "agent" in r.reply.lower()
+        assert session.state == DialogueState.CHOOSE_ACTION
+        assert session.ended is False
+        assert "say yes or no" in r.reply.lower()
 
 
 # ── Edge Case 11: Silence or empty input ──────────────────────────────

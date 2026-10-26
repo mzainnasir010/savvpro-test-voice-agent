@@ -16,5 +16,6 @@ def test_status_call_completes_across_api_turns(api_services):
 
     assert all(response.status_code == 200 for response in responses)
     assert history["verified"] is True
-    assert history["state"] == "CHOOSE_ACTION"
+    assert history["state"] == "ANYTHING_ELSE"
+    assert "say yes to continue" in responses[-1].json()["reply"].lower()
     assert "failed attempt" in responses[-1].json()["reply"].lower()

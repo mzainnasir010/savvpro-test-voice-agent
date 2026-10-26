@@ -26,8 +26,10 @@ def test_reschedule_call_reaches_booking_confirmation(api_services):
     booked = _call(client, session_id, "yes")
 
     assert "shall i book" in date_reply["reply"].lower()
-    assert booked["ended"] is True
+    assert booked["ended"] is False
+    assert "say yes to continue" in booked["reply"].lower()
     assert repo.get_parcel("RD30000001").current_slot_id is not None
+    assert _call(client, session_id, "no")["ended"] is True
 
 
 def test_pickup_call_confirms_selected_point(api_services):
@@ -35,12 +37,14 @@ def test_pickup_call_confirms_selected_point(api_services):
     session_id = _verified_call(client)
 
     _call(client, session_id, "pickup point")
-    confirmation = _call(client, session_id, "Westside Depot")
+    confirmation = _call(client, session_id, "Islamabad I-8 Markaz Depot")
     result = _call(client, session_id, "yes")
 
     assert "is that right" in confirmation["reply"].lower()
-    assert result["ended"] is True
+    assert result["ended"] is False
+    assert "say yes to continue" in result["reply"].lower()
     assert "collect" in result["reply"].lower()
+    assert _call(client, session_id, "no")["ended"] is True
 
 
 def test_cancel_call_cancels_after_confirmation(api_services):
@@ -51,5 +55,7 @@ def test_cancel_call_cancels_after_confirmation(api_services):
     result = _call(client, session_id, "yes")
 
     assert "sure" in prompt["reply"].lower()
-    assert result["ended"] is True
+    assert result["ended"] is False
+    assert "say yes to continue" in result["reply"].lower()
     assert repo.get_parcel("RD30000001").status.value == "cancelled"
+    assert _call(client, session_id, "no")["ended"] is True
